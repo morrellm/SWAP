@@ -23,7 +23,7 @@ namespace SimpleHtmlCloud
             }
         }
 
-        private static string _resourcePath = "Resources\\";
+        private static string _resourcePath = "C:\\Users\\Mitchell\\Documents\\Visual Studio 2013\\Projects\\SWAP\\Resources\\";
         public static string ResourcePath
         {
             get
@@ -58,6 +58,7 @@ namespace SimpleHtmlCloud
 
         public static void Main(String[] args)
         {
+            Console.WriteLine("Server Started.");
             new Program();
             Console.Read();
         }
@@ -517,13 +518,11 @@ namespace SimpleHtmlCloud
             {
                 //goto homepage
                 response = createResponse(Program.HomePage);//should be home page
+               
             }
             else
             {
-                //check if resource exists
-                //if so fetch it
-                //else 404 page
-                response = new HttpResponse(200);//TODO
+                response = createResponse(resource);
             }
 
             return response;
@@ -532,41 +531,93 @@ namespace SimpleHtmlCloud
         private HttpResponse createResponse(string resource)
         {
             HttpResponse response = null;
+            Console.WriteLine(Program.ResourcePath + resource+" | Exists = ");
+            Console.WriteLine(File.Exists(Program.ResourcePath + resource));
             if (File.Exists(Program.ResourcePath + resource))
             {
+           
                 response = new HttpResponse(200);
-                string body = "";
+                object body = "";
                 var fs = new FileStream(Program.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
-                loadFile(fs);
+                byte[] file = loadFile(fs);
+                var fileEnding = getFileType(resource);
 
                 //if text type convert to string
-                if (resource.EndsWith("html") || resource.EndsWith("htm") || resource.EndsWith("xml") ||
-                    resource.EndsWith("css") || resource.EndsWith("js"))
+                if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("xml") ||
+                    fileEnding.Equals("css") || fileEnding.Equals("js"))
                 {
-                    response.AddHeader("Content-Type", "text/");//TODO add resource type here
+                    response.AddHeader("Content-Type", "text/"+fileEnding);
+                    //sets body to text
+                    for (int i = 0; i < file.Length; i++)
+                    {
+                        body += "" + (char)file[i];
+                    }
                 }
-                else if (resource.EndsWith("php"))
+                else if (fileEnding.Equals("php"))
                 {
                     response.AddHeader("Content-Type", "text/html");
                     //TODO php parsing goes here
                 }
-                //else print utf rep of bytes
-
-                body = "";
+                else
+                {
+                    //TODO reaching this point means an multimedia file was requested
+                }
+                //else print utf-8 rep of bytes
+                
+                
+                
+                    
 
                 response.Body = body;
                 response.AddHeader("Content-Length", "" + fs.Length);
                 //TODO placeholder
                 fs.Close();
             }
-            else
+            else//TODO LEFTOFF HERE 1/28/2014
             {
-                //TODO 404 response
+                response = new HttpResponse(404);
+                //checks if user specified 404 page exists
+                if (File.Exists(Program.ResourcePath + Program.Page404))
+                {
+
+                }
+                else
+                {
+                    var body = "<!DOCTYPE HTML><html><head><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
+                               "<hr>SWAP auto generated 404 page.</body></html>";
+                    response.Body = body;
+                    response.AddHeader("Content-Type", "text/html");
+                    response.AddHeader("Content-Length", ""+body.Length);
+                }
             }
             return response;
         }
 
+        private string getFileType(string fileName)
+        {
+            var type = "";
+            var tokens = fileName.Split('.');
+
+            var rawEnding = tokens[tokens.Length - 1];
+
+            for (int i = 0; i < rawEnding.Length; i++)
+            {
+                char curChar = rawEnding[i];
+                //if curChar is a letter or number
+                int curCharInt = (int)curChar;
+                if ((curCharInt >= (int)'a' && curCharInt <= (int)'z') || (curCharInt >= (int)'A' && curCharInt <= (int)'Z') || (curCharInt >= (int)'0' && curCharInt <= (int)'9'))
+                {
+                    type += curChar;
+                }
+                else if (curChar != '.')//if the curChar is not a letter or number or a period the type is finished
+                {
+                    break;
+                }
+            }
+            Console.WriteLine("File Type: "+type);
+            return type;
+        }
         private byte[] loadFile(FileStream fs)
         {
 

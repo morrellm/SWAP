@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using HTTP;
 
 namespace PHP_PARSER
 {
@@ -16,8 +17,9 @@ namespace PHP_PARSER
     public static class PHP_SAPI
     {
         public static string phpLoc = "";
+        public static string GATE_INTER = "CGI/1.1";
 
-        public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
+       /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
                                                    "$_SERVER['GATEWAY_INTERFACE']", 	//Returns the version of the Common Gateway Interface (CGI) the server is using
                                                    "$_SERVER['SERVER_ADDR']", 	        //Returns the IP address of the host server
                                                    "$_SERVER['SERVER_NAME']" ,	        //Returns the name of the host server (such as www.w3schools.com)
@@ -45,6 +47,7 @@ namespace PHP_PARSER
                                                    "$_GET['(.*?)']",                    //GET superglobal with a variable name in it (Obtained from)
                                                    "$_REQUEST['(.*?)]"                  //REQUEST superglobal with a variable name in it ()
                                                  };
+        */
         /// <summary>
         /// This must be called before any php parsing can occur.
         /// A config file should have been included with this parser.
@@ -60,37 +63,34 @@ namespace PHP_PARSER
             return result;
         }
         
-        public static string Parse(string fname, string httpRequest)
+
+        public static HttpResponse Parse(string fname, HttpRequest request)
         {
-            var responseHeader = "";
-            var responseBody = "";
+            HttpResponse response = null;
             if (File.Exists(fname))
             {
-                responseHeader = "HTTP/1.1 200 OK\r\n\r\n";//the rest of the header information is to be handled by the callee
-                setSuperGlobals(httpRequest);
+                //200 have script, will parse
+                response = new HttpResponse(200);
+                setSuperGlobals(request);
             }
             else
             {
-                responseHeader = "HTTP/1.1 404 Not Found\r\n\r\n";//the rest of the header information is to be handled by the callee
+                //404 script not found
+                response = new HttpResponse(404);
             }
 
-            return responseHeader + responseBody;
-            
+            return response;
         }
-
-        //TODO get the HttpRequest class in here
-       // public static void Parse(string fname, HttpRequest request)
-       // {
-
-       // }
         /// <summary>
         /// This method sets superglobals to their correct values based upon the httpRequest invoking the php file.
         /// This method should be called before parsing a php file
         /// </summary>
         /// <param name="request">the request from which to extract the datas</param>
-        private static void setSuperGlobals(string request)
+        private static void setSuperGlobals(HttpRequest request)
         {
             //SERVER_ADDR, SERVER_NAME, SERVER_SOFTWARE, SERVER_PROTOCOL
+            request.GetValue("Host");//SERVER_ADDR
+            request.GetValue("Accept");
             //REQUEST_METHOD, REQUEST_TIME
             //QUERY_STRING
             //HTTP_ACCEPT, HTTP_ACCEPT_CHARSET
@@ -99,10 +99,9 @@ namespace PHP_PARSER
             //SCRIPT_FILENAME
             //SERVER_ADMIN, SERVER_PORT, SERVER_SIGNATURE
             //PATH_TRANSLATED, SCRIPT_NAME, SCRIPT_URI
-            var resource = "";
-            var httpMethod = "";
-            var host = "";
-            var contentType = "";
+            
+
+            
         }
 
     }

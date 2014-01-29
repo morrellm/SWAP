@@ -15,11 +15,11 @@ namespace HTTP
      ****************
      */
 
-    class HttpResponse
+    public class HttpResponse
     {
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpResponse object
         private Hashtable headers = new Hashtable();
-        private const string StatusLine = "status";
+        private const string STATUS_LINE = "status";
 
         private ArrayList _body = new ArrayList();
 
@@ -70,7 +70,7 @@ namespace HTTP
                     throw new NotImplementedException("Status code: " + statusCode + " is not supported by this implementation of HttpRequest");
             }
 
-            AddHeader(StatusLine, headerStart);
+            AddHeader(STATUS_LINE, headerStart);
         }
 
         public void AddHeader(string header, string value)
@@ -105,13 +105,13 @@ namespace HTTP
         {
             var str = "";
 
-            str += headers[StatusLine] + "\r\n";
+            str += headers[STATUS_LINE] + "\r\n";
 
             int count = 0;
             foreach (string headerName in headers.Keys)
             {
                 //skips method line
-                if (!headerName.Equals(StatusLine))
+                if (!headerName.Equals(STATUS_LINE))
                 {
                     str += headerName.Trim() + ": " + count + " \r\n";
                 }
@@ -123,7 +123,7 @@ namespace HTTP
             foreach (string headerContent in headers.Values)
             {
                 //skips method line
-                if (!headerContent.Equals(StatusLine))
+                if (!headerContent.Equals(STATUS_LINE))
                 {
                     str = str.Replace(" " + count + " ", " " + headerContent.Trim());
                 }
@@ -163,7 +163,7 @@ namespace HTTP
      ***************
      */
 
-    class HttpRequest
+    public class HttpRequest
     {
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpRequest object
         private Hashtable headers = new Hashtable();
@@ -235,6 +235,17 @@ namespace HTTP
         public void AddHeader(string header, string value)
         {
             headers.Add(header, value);
+        }
+
+        public String GetValue(string header)
+        {
+            String value = null;
+
+            if (headers.Contains(header))
+            {
+                value = (String)headers[header];
+            }
+            return value;
         }
 
         public override string ToString()

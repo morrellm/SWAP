@@ -1,0 +1,24 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<script>
+alert("Yo!");
+</script>
+<style>
+h1
+{
+color:red
+background-color:blue
+}
+p
+{
+text-align:center
+color:green
+}
+</style>
+<title>YO!!!!!!!</title>
+</head>
+<body>
+<h1>CENTRAL</h1>
+<p>Pizza</p>
+</html>
