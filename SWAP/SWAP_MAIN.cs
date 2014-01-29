@@ -522,6 +522,8 @@ namespace SimpleHtmlCloud
             }
             else
             {
+                resource = resource.Substring(1);//removes the / if it isn't the homepage request
+                resource = resource.Replace("/", "\\");//replaces any remaining / in the url
                 response = createResponse(resource);
             }
 
@@ -545,7 +547,8 @@ namespace SimpleHtmlCloud
 
                 //if text type convert to string
                 if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("xml") ||
-                    fileEnding.Equals("css") || fileEnding.Equals("js"))
+                    fileEnding.Equals("css") || fileEnding.Equals("js") || fileEnding.Equals("jpg") ||
+                    fileEnding.Equals("jpeg"))
                 {
                     response.AddHeader("Content-Type", "text/"+fileEnding);
                     //sets body to text
@@ -580,12 +583,13 @@ namespace SimpleHtmlCloud
                 //checks if user specified 404 page exists
                 if (File.Exists(Program.ResourcePath + Program.Page404))
                 {
+                    //byte[] file = loadFile(Program.ResourcePath + Program.Page404);
 
                 }
                 else
                 {
-                    var body = "<!DOCTYPE HTML><html><head><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
-                               "<hr>SWAP auto generated 404 page.</body></html>";
+                    var body = "<!DOCTYPE HTML><html><head><style>footer{text-size:0.5em;}</style><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
+                               "<hr></body><footer>SWAP auto generated 404 page.</footer></html>";
                     response.Body = body;
                     response.AddHeader("Content-Type", "text/html");
                     response.AddHeader("Content-Length", ""+body.Length);
