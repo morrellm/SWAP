@@ -178,6 +178,17 @@ namespace HTTP
             return isText;
         }
 
+
+        public bool ContainsHeader(string header)
+        {
+            bool result = false;
+            
+            if (headers.Contains(header)){
+                result = true;
+            }
+            
+            return result;
+        }
         public void SetHeader(string header, string value)
         {
             if (!headers.Contains(header)) 
