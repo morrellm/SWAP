@@ -73,6 +73,48 @@ namespace HTTP
             SetHeader(STATUS_LINE, headerStart);
         }
 
+        public bool Send(Stream strm)//TODO 1/30/2014
+        {
+            throw new NotImplementedException("TODO!");
+            bool result = false;
+
+            var toSend = GetHeaders();
+
+            for (int i = 0; i < toSend.Length; i++)
+            {
+                char curChar = toSend[i];
+                byte[] curSend = { (byte)curChar };
+
+                try
+                {
+                    strm.Write(curSend, 0, 1);
+                    strm.Flush();
+                }
+                catch (IOException ioe)
+                {
+                    Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
+                                            "!  An IOException occured while trying to send a response!        ! \n" +
+                                            "!  Causes:                                                        ! \n" +
+                                            "!  1) The client voulntarily closed the output stream             ! \n" +
+                                            "!  2) This machine has lost connection to the Internet            ! \n" +
+                                            "!  3) The client lost connection to the server and invoulntarily  ! \n" +
+                                            "!     closed the output stream                                    ! \n" +
+                                            "!-----------------------------------------------------------------!");
+                    break;//breaks the loop because trying to send anymore bytes would result in another IOException.
+                }
+
+            }
+
+            ArrayList body = (ArrayList)Body;
+
+            for (int i = 0; i < body.Count; i++)
+            {
+                //TODO SEND BODY 
+            }
+
+            return result;
+        }
+
         /// <summary>
         /// This method sets the proper MIME type based upon what type of file was requested
         /// </summary>

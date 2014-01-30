@@ -480,49 +480,9 @@ namespace SimpleHtmlCloud
 
             var response = ProcessRequest(request);//CLOSE TO DONE
 
-            SendResponse(response);//NOT TOUCHED YET
+            response.Send(_currentStream);//NOT TOUCHED YET
 
             _currentStream.Close();//DONE
-        }
-
-        private void SendResponse(HttpResponse response)
-        {
-            var toSend = response.GetHeaders(); 
-
-            for (int i = 0; i < toSend.Length; i++)
-            {
-                char curChar = toSend[i];
-                byte[] curSend = {(byte)curChar};
-
-                try
-                {
-                    _currentStream.Write(curSend, 0, 1);
-                    _currentStream.Flush();
-                }
-                catch (IOException ioe)
-                {
-                    Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
-                                            "!  An IOException occured while trying to send a response!        ! \n" +
-                                            "!  Causes:                                                        ! \n" +
-                                            "!  1) The client voulntarily closed the output stream             ! \n" +
-                                            "!  2) This machine has lost connection to the Internet            ! \n" +
-                                            "!  3) The client lost connection to the server and invoulntarily  ! \n" +
-                                            "!     closed the output stream                                    ! \n" +
-                                            "!-----------------------------------------------------------------!");
-                    break;//breaks the loop because trying to send anymore bytes would result in another IOException.
-                }
-
-            }
-
-            ArrayList body = (ArrayList)response.Body;
-
-            for (int i = 0; i < body.Count; i++)
-            {
-                //TODO SEND BODY 
-            }
-                
-            
-
         }
 
         private HttpResponse ProcessRequest(string request)
