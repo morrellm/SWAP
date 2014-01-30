@@ -164,8 +164,8 @@ namespace SimpleHtmlCloud
                 //adds content to body
                 response.Body = content;
                 //adds headers
-                response.AddHeader("Content-Type", "text/html; charset=utf-8");
-                response.AddHeader("Content-Length", "" + content.Length);
+                response.SetHeader("Content-Type", "text/html; charset=utf-8");
+                response.SetHeader("Content-Length", "" + content.Length);
             }
             else
             {
@@ -192,8 +192,8 @@ namespace SimpleHtmlCloud
                     response.Body = content;
                 }
                 //add headers
-                response.AddHeader("Content-Type", "text/html; charset=utf-8");
-                response.AddHeader("Content-Length", "" + content.Length);
+                response.SetHeader("Content-Type", "text/html; charset=utf-8");
+                response.SetHeader("Content-Length", "" + content.Length);
             }
 
 
@@ -476,22 +476,23 @@ namespace SimpleHtmlCloud
         /// </summary>
         private void HandleRequest()
         {
-            string request = ReadRequest();
+            string request = ReadRequest();//DONE
 
-            var response = ProcessRequest(request);
+            var response = ProcessRequest(request);//CLOSE TO DONE
 
-            SendResponse(response);
+            SendResponse(response);//NOT TOUCHED YET
 
-            _currentStream.Close();
+            _currentStream.Close();//DONE
         }
 
         private void SendResponse(HttpResponse response)
         {
-            var toSend = response.ToString();
+            var toSend = response.GetHeaders(); 
+
             for (int i = 0; i < toSend.Length; i++)
             {
                 char curChar = toSend[i];
-                byte[] curSend = { (byte)curChar };
+                byte[] curSend = {(byte)curChar};
 
                 try
                 {
@@ -510,9 +511,17 @@ namespace SimpleHtmlCloud
                                             "!-----------------------------------------------------------------!");
                     break;//breaks the loop because trying to send anymore bytes would result in another IOException.
                 }
-                
-                
+
             }
+
+            ArrayList body = (ArrayList)response.Body;
+
+            for (int i = 0; i < body.Count; i++)
+            {
+                //TODO SEND BODY 
+            }
+                
+            
 
         }
 
@@ -552,7 +561,8 @@ namespace SimpleHtmlCloud
             HttpResponse response = null;
             Console.Write(Program.ResourcePath + resource+" | Exists = ");
             Console.WriteLine(File.Exists(Program.ResourcePath + resource));
-            if (File.Exists(Program.ResourcePath + resource))
+
+            if (File.Exists(Program.ResourcePath + resource))//200 OK
             {
            
                 response = new HttpResponse(200);
@@ -563,7 +573,7 @@ namespace SimpleHtmlCloud
                 var fileEnding = getFileType(resource);
                 bool isText = true;
 
-                isText = setContentType(fileEnding, response);//sets the Content-Type of a respones and checks if the type is text
+                isText = response.SetContentType(fileEnding);//sets the Content-Type of a respones and checks if the type is text
 
                 Console.Error.WriteLine("isText? -->"+isText);
                 if (isText == true)
@@ -576,21 +586,25 @@ namespace SimpleHtmlCloud
                 }
                 else
                 {//all other files are attached to the body as variable file(byte[])
-                    body = file;
+                    for (int i = 0; i < file.Length; i++)
+                    {
+                        body = file[i];
+                    }
+                        
                 }
                 //TODO fix the way the body is added to the HttpResponse 1/30/2014
                 response.Body = body;
           
-                response.AddHeader("Content-Length", "" + fs.Length);
+                response.SetHeader("Content-Length", "" + fs.Length);
                 fs.Close();
             }
-            else//TODO LEFTOFF HERE 1/28/2014
+            else//404 File Not Found
             {
                 response = new HttpResponse(404);
                 //checks if user specified 404 page exists
                 if (File.Exists(Program.ResourcePath + Program.Page404))
                 {
-                    //byte[] file = loadFile(Program.ResourcePath + Program.Page404);
+                   // byte[] file = loadFile(Program.ResourcePath + Program.Page404);
 
                 }
                 else
@@ -598,116 +612,13 @@ namespace SimpleHtmlCloud
                     var body = "<!DOCTYPE HTML><html><head><style>footer{text-size:0.5em;}</style><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
                                "<hr></body><footer>SWAP auto generated 404 page.</footer></html>";
                     response.Body = body;
-                    response.AddHeader("Content-Type", "text/html");
-                    response.AddHeader("Content-Length", ""+body.Length);
+                    response.SetHeader("Content-Type", "text/html");
+                    response.SetHeader("Content-Length", ""+body.Length);
                 }
             }
             return response;
         }
-        /// <summary>
-        /// This method sets the proper MIME type based upon what type of file was requested
-        /// </summary>
-        /// <param name="fileEnding"></param>
-        /// <param name="response"></param>
-        private bool setContentType(string fileEnding, HttpResponse response)
-        {
-            var value = "";
-            var isText = true;
-
-            //if text type convert to string
-            if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("stm"))
-            {
-                value = "text/html";
-            }
-            else if (fileEnding.Equals("xml") || fileEnding.Equals("css"))
-            {
-                value = "text/"+fileEnding;
-            }
-            else if (fileEnding.Equals("php"))
-            {
-                value = "text/html";
-                //TODO php parsing goes here
-            }
-            else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
-            {
-                value = "image/jpeg";
-                isText = false;
-            }
-            else if (fileEnding.Equals("gif") || fileEnding.Equals("bmp"))
-            {
-                value = "image/" + fileEnding;
-                isText = false;
-            }
-            else if (fileEnding.Equals("ico"))
-            {
-                value = "image/x-icon";
-                isText = false;
-            }
-            else if (fileEnding.Equals("svg"))
-            {
-                value = "image/svg+xml";
-                isText = false;
-            }
-            else if (fileEnding.Equals("mp2") || fileEnding.Equals("mpa") || fileEnding.Equals("mpe") || 
-                     fileEnding.Equals("mpeg") || fileEnding.Equals("mpg") || fileEnding.Equals("mpv2"))
-            {
-                value = "video/mpeg";
-                isText = false;
-            }
-            else if (fileEnding.Equals("qt"))
-            {
-                value = "video/quicktime";
-                isText = false;
-            }
-            else if (fileEnding.Equals("rtx"))
-            {
-                value = "text/richtext";
-            }
-            else if (fileEnding.Equals("rtf"))
-            {
-                value = "application/rtf";
-                isText = false;
-            }
-            else if (fileEnding.Equals("mp3"))
-            {
-                value = "audio/mpeg";
-                isText = false;
-            }
-            else if (fileEnding.Equals("snd"))
-            {
-                value = "audio/basic";
-                isText = false;
-            }
-            else if (fileEnding.Equals("pdf"))
-            {
-                value = "application/pdf";
-                isText = false;
-            }
-            else if (fileEnding.Equals("pps") || fileEnding.Equals("ppt"))
-            {
-                value = "application/vnd.ms-powerpoint";
-                isText = false;
-            }
-            else if (fileEnding.Equals("swf"))
-            {
-                value = "application/x-shockwave-flash";
-                isText = false;
-            }
-            else if (fileEnding.Equals("js"))
-            {
-                value = "application/x-javascript";
-                isText = false;
-            }
-            else
-            {
-                value = "application/octet-stream";
-                isText = false;
-            }
-
-            response.AddHeader("Content-Type", value);
-
-            return isText;
-        }
+        
         private string getFileType(string fileName)
         {
             var type = "";

@@ -70,12 +70,125 @@ namespace HTTP
                     throw new NotImplementedException("Status code: " + statusCode + " is not supported by this implementation of HttpRequest");
             }
 
-            AddHeader(STATUS_LINE, headerStart);
+            SetHeader(STATUS_LINE, headerStart);
         }
 
-        public void AddHeader(string header, string value)
+        /// <summary>
+        /// This method sets the proper MIME type based upon what type of file was requested
+        /// </summary>
+        /// <param name="fileEnding"></param>
+        /// <param name="response"></param>
+        public bool SetContentType(string fileEnding)
         {
-            headers.Add(header, value);
+            var value = "";
+            var isText = true;
+
+            //if text type convert to string
+            if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("stm"))
+            {
+                value = "text/html";
+            }
+            else if (fileEnding.Equals("xml") || fileEnding.Equals("css"))
+            {
+                value = "text/" + fileEnding;
+            }
+            else if (fileEnding.Equals("php"))
+            {
+                value = "text/html";
+                //TODO php parsing goes here
+            }
+            else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
+            {
+                value = "image/jpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("gif") || fileEnding.Equals("bmp"))
+            {
+                value = "image/" + fileEnding;
+                isText = false;
+            }
+            else if (fileEnding.Equals("ico"))
+            {
+                value = "image/x-icon";
+                isText = false;
+            }
+            else if (fileEnding.Equals("svg"))
+            {
+                value = "image/svg+xml";
+                isText = false;
+            }
+            else if (fileEnding.Equals("mp2") || fileEnding.Equals("mpa") || fileEnding.Equals("mpe") ||
+                     fileEnding.Equals("mpeg") || fileEnding.Equals("mpg") || fileEnding.Equals("mpv2"))
+            {
+                value = "video/mpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("qt"))
+            {
+                value = "video/quicktime";
+                isText = false;
+            }
+            else if (fileEnding.Equals("rtx"))
+            {
+                value = "text/richtext";
+            }
+            else if (fileEnding.Equals("rtf"))
+            {
+                value = "application/rtf";
+                isText = false;
+            }
+            else if (fileEnding.Equals("mp3"))
+            {
+                value = "audio/mpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("snd"))
+            {
+                value = "audio/basic";
+                isText = false;
+            }
+            else if (fileEnding.Equals("pdf"))
+            {
+                value = "application/pdf";
+                isText = false;
+            }
+            else if (fileEnding.Equals("pps") || fileEnding.Equals("ppt"))
+            {
+                value = "application/vnd.ms-powerpoint";
+                isText = false;
+            }
+            else if (fileEnding.Equals("swf"))
+            {
+                value = "application/x-shockwave-flash";
+                isText = false;
+            }
+            else if (fileEnding.Equals("js"))
+            {
+                value = "application/x-javascript";
+                isText = false;
+            }
+            else
+            {
+                value = "application/octet-stream";
+                isText = false;
+            }
+
+            this.SetHeader("Content-Type", value);
+
+            return isText;
+        }
+
+        public void SetHeader(string header, string value)
+        {
+            if (!headers.Contains(header)) 
+            {
+                headers.Add(header, value);
+            }
+            else
+            {
+                headers[header] = value;
+            }
+            
         }
 
         public string GetValue(string header)
