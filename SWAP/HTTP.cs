@@ -101,7 +101,7 @@ namespace HTTP
             return value;
         }
 
-        public string GetHeader()
+        public string GetHeaders()
         {
             var str = "";
 
@@ -134,22 +134,33 @@ namespace HTTP
             return str;
         }
 
-        public string GetBody()
+        private string GetBody()
         {
             var str = "";
-
-            for (int i = 0; i < _body.Count; i++)//TODO wtf is a LINQ-expression?!?!
+            
+            foreach (object bodyItem in _body)//TODO this needs to properly add collections and non-collection items to the body
             {
-                str += _body[i] + "\r\n";
-            }
+                if (!_body.GetType().IsAssignableFrom(new ArrayList().GetType()) &&
+                    !_body.GetType().IsAssignableFrom(new Hashtable().GetType()))
+                {
+                    str += bodyItem.ToString();
+                }
+                else
+                {
+                    foreach (object item in _body)
+                    {
+                        str += item.ToString();
+                    }
+                }
 
+            }
             return str;
         }
         public override string ToString()
         {
             var str = "";
 
-            str += GetHeader();
+            str += GetHeaders();
             //header-body seperation
             str += "\r\n";
             str += GetBody();
@@ -236,7 +247,14 @@ namespace HTTP
         {
             headers.Add(header, value);
         }
-
+        /// <summary>
+        /// Attempts to get a specified header, if the header
+        /// is in the found in this requests header it returns
+        /// its value represented by a string. if the header is
+        /// not in the table null is returned.
+        /// </summary>
+        /// <param name="header">the header of which to get a vakue for</param>
+        /// <returns>the value of the specifed header or null(if the header isn't in this HttpResponse</returns>
         public String GetValue(string header)
         {
             String value = null;

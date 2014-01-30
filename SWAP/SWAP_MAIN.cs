@@ -493,8 +493,25 @@ namespace SimpleHtmlCloud
                 char curChar = toSend[i];
                 byte[] curSend = { (byte)curChar };
 
-                _currentStream.Write(curSend, 0, 1);
-                _currentStream.Flush();
+                try
+                {
+                    _currentStream.Write(curSend, 0, 1);
+                    _currentStream.Flush();
+                }
+                catch (IOException ioe)
+                {
+                    Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
+                                            "!  An IOException occured while trying to send a response!        ! \n" +
+                                            "!  Causes:                                                        ! \n" +
+                                            "!  1) The client voulntarily closed the output stream             ! \n" +
+                                            "!  2) This machine has lost connection to the Internet            ! \n" +
+                                            "!  3) The client lost connection to the server and invoulntarily  ! \n" +
+                                            "!     closed the output stream                                    ! \n" +
+                                            "!-----------------------------------------------------------------!");
+                    break;//breaks the loop because trying to send anymore bytes would result in another IOException.
+                }
+                
+                
             }
 
         }
@@ -533,7 +550,7 @@ namespace SimpleHtmlCloud
         private HttpResponse createResponse(string resource)
         {
             HttpResponse response = null;
-            Console.WriteLine(Program.ResourcePath + resource+" | Exists = ");
+            Console.Write(Program.ResourcePath + resource+" | Exists = ");
             Console.WriteLine(File.Exists(Program.ResourcePath + resource));
             if (File.Exists(Program.ResourcePath + resource))
             {
@@ -544,37 +561,27 @@ namespace SimpleHtmlCloud
 
                 byte[] file = loadFile(fs);
                 var fileEnding = getFileType(resource);
+                bool isText = true;
 
-                //if text type convert to string
-                if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("xml") ||
-                    fileEnding.Equals("css") || fileEnding.Equals("js") || fileEnding.Equals("jpg") ||
-                    fileEnding.Equals("jpeg"))
+                isText = setContentType(fileEnding, response);//sets the Content-Type of a respones and checks if the type is text
+
+                Console.Error.WriteLine("isText? -->"+isText);
+                if (isText == true)
                 {
-                    response.AddHeader("Content-Type", "text/"+fileEnding);
-                    //sets body to text
+                    //text files are attached to the body in this way
                     for (int i = 0; i < file.Length; i++)
                     {
                         body += "" + (char)file[i];
                     }
                 }
-                else if (fileEnding.Equals("php"))
-                {
-                    response.AddHeader("Content-Type", "text/html");
-                    //TODO php parsing goes here
-                }
                 else
-                {
-                    //TODO reaching this point means an multimedia file was requested
+                {//all other files are attached to the body as variable file(byte[])
+                    body = file;
                 }
-                //else print utf-8 rep of bytes
-                
-                
-                
-                    
-
+                //TODO fix the way the body is added to the HttpResponse 1/30/2014
                 response.Body = body;
+          
                 response.AddHeader("Content-Length", "" + fs.Length);
-                //TODO placeholder
                 fs.Close();
             }
             else//TODO LEFTOFF HERE 1/28/2014
@@ -597,7 +604,110 @@ namespace SimpleHtmlCloud
             }
             return response;
         }
+        /// <summary>
+        /// This method sets the proper MIME type based upon what type of file was requested
+        /// </summary>
+        /// <param name="fileEnding"></param>
+        /// <param name="response"></param>
+        private bool setContentType(string fileEnding, HttpResponse response)
+        {
+            var value = "";
+            var isText = true;
 
+            //if text type convert to string
+            if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("stm"))
+            {
+                value = "text/html";
+            }
+            else if (fileEnding.Equals("xml") || fileEnding.Equals("css"))
+            {
+                value = "text/"+fileEnding;
+            }
+            else if (fileEnding.Equals("php"))
+            {
+                value = "text/html";
+                //TODO php parsing goes here
+            }
+            else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
+            {
+                value = "image/jpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("gif") || fileEnding.Equals("bmp"))
+            {
+                value = "image/" + fileEnding;
+                isText = false;
+            }
+            else if (fileEnding.Equals("ico"))
+            {
+                value = "image/x-icon";
+                isText = false;
+            }
+            else if (fileEnding.Equals("svg"))
+            {
+                value = "image/svg+xml";
+                isText = false;
+            }
+            else if (fileEnding.Equals("mp2") || fileEnding.Equals("mpa") || fileEnding.Equals("mpe") || 
+                     fileEnding.Equals("mpeg") || fileEnding.Equals("mpg") || fileEnding.Equals("mpv2"))
+            {
+                value = "video/mpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("qt"))
+            {
+                value = "video/quicktime";
+                isText = false;
+            }
+            else if (fileEnding.Equals("rtx"))
+            {
+                value = "text/richtext";
+            }
+            else if (fileEnding.Equals("rtf"))
+            {
+                value = "application/rtf";
+                isText = false;
+            }
+            else if (fileEnding.Equals("mp3"))
+            {
+                value = "audio/mpeg";
+                isText = false;
+            }
+            else if (fileEnding.Equals("snd"))
+            {
+                value = "audio/basic";
+                isText = false;
+            }
+            else if (fileEnding.Equals("pdf"))
+            {
+                value = "application/pdf";
+                isText = false;
+            }
+            else if (fileEnding.Equals("pps") || fileEnding.Equals("ppt"))
+            {
+                value = "application/vnd.ms-powerpoint";
+                isText = false;
+            }
+            else if (fileEnding.Equals("swf"))
+            {
+                value = "application/x-shockwave-flash";
+                isText = false;
+            }
+            else if (fileEnding.Equals("js"))
+            {
+                value = "application/x-javascript";
+                isText = false;
+            }
+            else
+            {
+                value = "application/octet-stream";
+                isText = false;
+            }
+
+            response.AddHeader("Content-Type", value);
+
+            return isText;
+        }
         private string getFileType(string fileName)
         {
             var type = "";
