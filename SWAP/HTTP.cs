@@ -282,6 +282,10 @@ namespace HTTP
                 value = "application/x-javascript";
                 isText = false;
             }
+            else if (fileEnding.Equals("txt"))
+            {
+                value = "text/plain";
+            }
             else
             {
                 value = "application/octet-stream";

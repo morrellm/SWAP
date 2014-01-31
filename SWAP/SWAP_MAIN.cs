@@ -23,7 +23,8 @@ namespace SimpleHtmlCloud
             }
         }
 
-        private static string _resourcePath = "C:\\Users\\Mitchell\\Documents\\Visual Studio 2013\\Projects\\SWAP\\Resources\\";
+        private static string _workingPath = Directory.GetCurrentDirectory();
+        private static string _resourcePath = "\\Resources\\";
         public static string ResourcePath
         {
             get
@@ -53,6 +54,8 @@ namespace SimpleHtmlCloud
         public Program()
         {
             var server = new HttpServer(this);
+            _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1) );
+            _resourcePath = _workingPath+_resourcePath;
             server.Start();
         }
 
