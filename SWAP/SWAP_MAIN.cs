@@ -96,8 +96,12 @@ namespace SimpleHtmlCloud
      ****************************
      * CLASS START HtmlGenerator
      ****************************
-     */
-    //TODO This class is what need to be worked on
+    |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+    |This class is a relic from the project SWAP was born from. |
+    |This class is marked for deletion, but is kept for possible|
+    |dependences.                                               |
+    |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
+    */
     class HtmlGenerator
     {
         private static string _myAddr = "155.92.105.192";
@@ -478,10 +482,12 @@ namespace SimpleHtmlCloud
         {
             string request = ReadRequest();//DONE
 
-            var response = ProcessRequest(request);//CLOSE TO DONE
+            var response = ProcessRequest(request);//DONE for now (1/30/2014)
 
-            response.Send(_currentStream);//NOT TOUCHED YET
-
+            if (response != null)//this occurs when an server error occurs
+            {
+                response.Send(_currentStream);//NOT TOUCHED YET, TODO
+            }
             _currentStream.Close();//DONE
         }
 
@@ -526,33 +532,30 @@ namespace SimpleHtmlCloud
             {
            
                 response = new HttpResponse(200);
-                object body = "";
+                var body = "";
                 var fs = new FileStream(Program.ResourcePath + resource, FileMode.Open, FileAccess.Read);
+                char[] file = null;
 
-                byte[] file = loadFile(fs);
+                if (fs.Length <= 30000000)//if the file is less than 30MB
+                {
+                    file = loadFile(fs);
+                }
+                else
+                {
+                    response.SendErrorMessage(_currentStream, 100);
+                    return null;
+                }
+               
                 var fileEnding = getFileType(resource);
                 bool isText = true;
 
                 isText = response.SetContentType(fileEnding);//sets the Content-Type of a respones and checks if the type is text
 
                 Console.Error.WriteLine("isText? -->"+isText);
-                if (isText == true)
-                {
-                    //text files are attached to the body in this way
-                    for (int i = 0; i < file.Length; i++)
-                    {
-                        body += "" + (char)file[i];
-                    }
-                }
-                else
-                {//all other files are attached to the body as variable file(byte[])
-                    for (int i = 0; i < file.Length; i++)
-                    {
-                        body = file[i];
-                    }
-                        
-                }
-                //TODO fix the way the body is added to the HttpResponse 1/30/2014
+         
+                 //text files are attached to the body in this way
+                body = new String(file);
+                
                 response.Body = body;
           
                 response.SetHeader("Content-Length", "" + fs.Length);
@@ -569,7 +572,7 @@ namespace SimpleHtmlCloud
                 }
                 else
                 {
-                    var body = "<!DOCTYPE HTML><html><head><style>footer{text-size:0.5em;}</style><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
+                    var body = "<!DOCTYPE HTML><html><head><style>footer{font-size:0.95em;text-align:center;}</style><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
                                "<hr></body><footer>SWAP auto generated 404 page.</footer></html>";
                     response.Body = body;
                     response.SetHeader("Content-Type", "text/html");
@@ -603,11 +606,16 @@ namespace SimpleHtmlCloud
             Console.WriteLine("File Type: "+type);
             return type;
         }
-        private byte[] loadFile(FileStream fs)
+        private char[] loadFile(FileStream fs)
         {
-
-            byte[] file = new byte[fs.Length];
-            fs.Read(file, 0, (int)fs.Length);
+            char[] file = new char[fs.Length];
+            byte[] buffer = new byte[1];
+            for (int i = 0; i < file.Length; i++)
+            {
+                fs.Read(buffer, 0, 1);
+                file[i] = (char)buffer[0];
+            }
+                
 
             return file;
         }

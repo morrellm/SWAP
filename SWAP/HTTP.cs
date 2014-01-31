@@ -21,14 +21,14 @@ namespace HTTP
         private Hashtable headers = new Hashtable();
         private const string STATUS_LINE = "status";
 
-        private ArrayList _body = new ArrayList();
+        private string _body = "";
 
-        public Object Body
+        public string Body
         {
             get { return _body; }
             set
             {
-                _body.Add(value);
+                _body +=value;
             }
         }
 
@@ -75,19 +75,68 @@ namespace HTTP
 
         public bool Send(Stream strm)//TODO 1/30/2014
         {
-            throw new NotImplementedException("TODO!");
             bool result = false;
+            bool sepBody = false;
 
-            var toSend = GetHeaders();
+            var toSend = "";
+            Console.WriteLine(""+Body.Length);
+            if (Body.Length <= 1000000)//if body file size is < 1MB
+            {
+                toSend = GetHeaders() + Body;
+            }                       
+            else if (Body.Length <= 30000000)//otherwise the body and headers are sent seperately if the size is less than 30MB
+            {
+                toSend = GetHeaders();
+                sepBody = true;
+            }
+            else
+            {
+                SendErrorMessage(strm, 100);
+                return false;
+            }
+            
+            //first (possibly only necessary send)
+            byte[] curSend = new byte[toSend.Length];
 
+            //sends response
             for (int i = 0; i < toSend.Length; i++)
             {
                 char curChar = toSend[i];
-                byte[] curSend = { (byte)curChar };
+                curSend[i] = (byte)curChar;
+            }
+            
+            try
+            {
+                strm.Write(curSend, 0, curSend.Length);
+                strm.Flush();
+            }
+            catch (IOException ioe)
+            {
+                Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
+                                        "!  An IOException occured while trying to send a response!        ! \n" +
+                                        "!  Causes:                                                        ! \n" +
+                                        "!  1) The client voulntarily closed the output stream             ! \n" +
+                                        "!  2) This machine has lost connection to the Internet            ! \n" +
+                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
+                                        "!     closed the output stream                                    ! \n" +
+                                        "!-----------------------------------------------------------------!");
+            }
 
+            //second(if needed) repsonse
+            if (sepBody == true)
+            {
+                toSend = Body;
+
+                curSend = new byte[toSend.Length];
+
+                for (int i = 0; i < toSend.Length; i++)
+                {
+                    char curChar = toSend[i];
+                    curSend[i] = (byte)curChar;
+                }
                 try
                 {
-                    strm.Write(curSend, 0, 1);
+                    strm.Write(curSend, 0, curSend.Length);
                     strm.Flush();
                 }
                 catch (IOException ioe)
@@ -100,21 +149,45 @@ namespace HTTP
                                             "!  3) The client lost connection to the server and invoulntarily  ! \n" +
                                             "!     closed the output stream                                    ! \n" +
                                             "!-----------------------------------------------------------------!");
-                    break;//breaks the loop because trying to send anymore bytes would result in another IOException.
                 }
-
-            }
-
-            ArrayList body = (ArrayList)Body;
-
-            for (int i = 0; i < body.Count; i++)
-            {
-                //TODO SEND BODY 
             }
 
             return result;
         }
 
+        public void SendErrorMessage(Stream strm, int errorCode)
+        {
+            var errorMessage = "";
+            var htmlBody = "<!DOCTYPE HTML><html><head><style>footer{font-size:0.95em;text-align:center;}</style><title>SWAP Error 'errorCode'</title></head><body>'errorMessage'<br />" +
+                           "<hr></body><footer>SWAP auto generated page.</footer></html>";
+            switch (errorCode)
+            {
+                case 100:
+                    errorMessage = "The lighter you requested could not be found on the server. Please ask coworker to borrow theirs.";
+                    break;
+                default:
+                    errorCode = -1;
+                    errorMessage = "null";
+                    break;
+            }
+
+            if (errorCode != -1)
+            {
+                htmlBody = htmlBody.Replace("'errorCode'", ""+errorCode);
+            }
+            else
+            {
+                htmlBody = htmlBody.Replace("'errorCode'", "0-0");
+            }
+
+            htmlBody = htmlBody.Replace("'errorMessage'", "" + errorMessage);
+
+            SetHeader("Content-Length", ""+htmlBody.Length);
+            SetHeader("Content-Type", "text/html");
+            Body = htmlBody;
+
+            Send(strm);    
+        }
         /// <summary>
         /// This method sets the proper MIME type based upon what type of file was requested
         /// </summary>
@@ -297,39 +370,17 @@ namespace HTTP
                 count++;
             }
 
+            str += "\r\n";//extra \r\n to seperate header from body
+
             return str;
         }
 
-        private string GetBody()
-        {
-            var str = "";
-            
-            foreach (object bodyItem in _body)//TODO this needs to properly add collections and non-collection items to the body
-            {
-                if (!_body.GetType().IsAssignableFrom(new ArrayList().GetType()) &&
-                    !_body.GetType().IsAssignableFrom(new Hashtable().GetType()))
-                {
-                    str += bodyItem.ToString();
-                }
-                else
-                {
-                    foreach (object item in _body)
-                    {
-                        str += item.ToString();
-                    }
-                }
-
-            }
-            return str;
-        }
         public override string ToString()
         {
             var str = "";
 
             str += GetHeaders();
-            //header-body seperation
-            str += "\r\n";
-            str += GetBody();
+            str += Body;
 
             return str;
         }
