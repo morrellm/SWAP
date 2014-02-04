@@ -21,17 +21,6 @@ namespace HTTP
         private Hashtable headers = new Hashtable();
         private const string STATUS_LINE = "status";
 
-        private string _body = "";
-
-        public string Body
-        {
-            get { return _body; }
-            set
-            {
-                _body +=value;
-            }
-        }
-
         public HttpResponse(int statusCode)
         {
             SetStatusCode(statusCode);
@@ -73,42 +62,108 @@ namespace HTTP
             SetHeader(STATUS_LINE, headerStart);
         }
 
-        public bool Send(Stream strm)//TODO 1/30/2014
+        public bool Send(Stream strm, FileStream fs)//TODO 1/30/2014
         {
             bool result = false;
-            bool sepBody = false;
 
             var toSend = "";
-            Console.WriteLine(""+Body.Length);
-            if (Body.Length <= 1000000)//if body file size is < 1MB
+            Console.WriteLine("" + fs.Length);
+            toSend = GetHeaders() + ReadFile(fs);
+
+            if (ContainsHeader("Content-Length"))
             {
-                toSend = GetHeaders() + Body;
-            }                       
-            else if (Body.Length <= 30000000)//otherwise the body and headers are sent seperately if the size is less than 30MB
-            {
-                toSend = GetHeaders();
-                sepBody = true;
+                DeleteHeader("Transfer-Encoding");
             }
-            else
-            {
-                SendErrorMessage(strm, 100);
-                return false;
-            }
-            
-            //first (possibly only necessary send)
-            byte[] curSend = new byte[toSend.Length];
 
             //sends response
-            for (int i = 0; i < toSend.Length; i++)
+            SendString(strm, toSend);
+
+
+            return result;
+        }
+
+        private string ReadFile(FileStream fs)
+        {
+            var fileContent = "";
+
+            byte[] buffer = new byte[fs.Length];
+            fs.Read(buffer, 0, (int)fs.Length);
+            for(int i = 0; i < fs.Length; i++)
             {
-                char curChar = toSend[i];
+                fileContent += "" + (char)buffer[i];
+            }
+
+            return fileContent;
+        }
+
+        public bool SendChunked(Stream strm, FileStream fs)
+        {
+            bool result = true;
+            var toSend = GetHeaders();
+            //checks if the transfer encoding is correct
+            if (!GetValue("Transfer-Encoding").Equals("chunked"))
+            {
+                return false;
+            }
+          
+            //sending can now begin
+            SendString(strm, toSend);
+            var ind = 0;
+            var chunkSize = 100;//10 Bytes chunk size
+            bool stop = false;//stop sending?
+
+            while (fs.Length > ind && !stop)
+            {
+                int remaining = (int)fs.Length - ind;
+
+                if (remaining < chunkSize)
+                {
+                    chunkSize = remaining;
+                }
+
+                string chunk = Convert.ToString(chunkSize, 16) + "\r\n";//hexidecimal representation of the
+                byte[] chunkBuffer = new byte[chunkSize];
+
+
+                fs.Read(chunkBuffer, 0, chunkSize);
+                for (int i = 0; i < chunkSize; i++)
+                {
+                    chunk += "" + (char)chunkBuffer[i];
+                    
+                }
+                chunk += "\r\n";
+                stop = !SendString(strm, chunk);
+                
+
+                ind += chunkSize;
+            }
+            if (!stop)
+            {
+                //sends the final zero
+                string chunkEnder = "0\r\n";
+                SendString(strm, chunkEnder);
+            }
+
+            return result;
+        }
+
+        private bool SendString(Stream strm, string strToSend)
+        {
+            bool result = false;
+
+            byte[] curSend = new byte[strToSend.Length];
+
+            for (int i = 0; i < strToSend.Length; i++)
+            {
+                char curChar = strToSend[i];
                 curSend[i] = (byte)curChar;
             }
-            
+
             try
             {
                 strm.Write(curSend, 0, curSend.Length);
                 strm.Flush();
+                result = true;
             }
             catch (IOException ioe)
             {
@@ -122,40 +177,11 @@ namespace HTTP
                                         "!-----------------------------------------------------------------!");
             }
 
-            //second(if needed) repsonse
-            if (sepBody == true)
-            {
-                toSend = Body;
-
-                curSend = new byte[toSend.Length];
-
-                for (int i = 0; i < toSend.Length; i++)
-                {
-                    char curChar = toSend[i];
-                    curSend[i] = (byte)curChar;
-                }
-                try
-                {
-                    strm.Write(curSend, 0, curSend.Length);
-                    strm.Flush();
-                }
-                catch (IOException ioe)
-                {
-                    Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
-                                            "!  An IOException occured while trying to send a response!        ! \n" +
-                                            "!  Causes:                                                        ! \n" +
-                                            "!  1) The client voulntarily closed the output stream             ! \n" +
-                                            "!  2) This machine has lost connection to the Internet            ! \n" +
-                                            "!  3) The client lost connection to the server and invoulntarily  ! \n" +
-                                            "!     closed the output stream                                    ! \n" +
-                                            "!-----------------------------------------------------------------!");
-                }
-            }
-
             return result;
         }
 
-        public void SendErrorMessage(Stream strm, int errorCode)
+        //THIS METHOD NEEDS TO BE REFRACTORED OR MARKED AS DEPRECATED!
+        /*public void SendErrorMessage(Stream strm, int errorCode)
         {
             var errorMessage = "";
             var htmlBody = "<!DOCTYPE HTML><html><head><style>footer{font-size:0.95em;text-align:center;}</style><title>SWAP Error 'errorCode'</title></head><body>'errorMessage'<br />" +
@@ -173,7 +199,7 @@ namespace HTTP
 
             if (errorCode != -1)
             {
-                htmlBody = htmlBody.Replace("'errorCode'", ""+errorCode);
+                htmlBody = htmlBody.Replace("'errorCode'", "" + errorCode);
             }
             else
             {
@@ -182,18 +208,18 @@ namespace HTTP
 
             htmlBody = htmlBody.Replace("'errorMessage'", "" + errorMessage);
 
-            SetHeader("Content-Length", ""+htmlBody.Length);
+            SetHeader("Content-Length", "" + htmlBody.Length);
             SetHeader("Content-Type", "text/html");
             Body = htmlBody;
 
-            Send(strm);    
-        }
+            Send(strm);
+        }*/
         /// <summary>
         /// This method sets the proper MIME type based upon what type of file was requested
         /// </summary>
         /// <param name="fileEnding"></param>
         /// <param name="response"></param>
-        public bool SetContentType(string fileEnding)
+        public bool SetContentType(string fileEnding, string fname)
         {
             var value = "";
             var isText = true;
@@ -289,6 +315,7 @@ namespace HTTP
             else
             {
                 value = "application/octet-stream";
+                SetHeader("content-disposition", "attachment; filename=" + fname);
                 isText = false;
             }
 
@@ -297,20 +324,34 @@ namespace HTTP
             return isText;
         }
 
+        public bool DeleteHeader(string header)
+        {
+            bool result = false;
+
+            if (ContainsHeader(header))
+            {
+                result = true;
+                headers.Remove(header);
+            }
+
+            return result;
+        }
+
 
         public bool ContainsHeader(string header)
         {
             bool result = false;
-            
-            if (headers.Contains(header)){
+
+            if (headers.Contains(header))
+            {
                 result = true;
             }
-            
+
             return result;
         }
         public void SetHeader(string header, string value)
         {
-            if (!headers.Contains(header)) 
+            if (!headers.Contains(header))
             {
                 headers.Add(header, value);
             }
@@ -318,7 +359,7 @@ namespace HTTP
             {
                 headers[header] = value;
             }
-            
+
         }
 
         public string GetValue(string header)
@@ -384,7 +425,6 @@ namespace HTTP
             var str = "";
 
             str += GetHeaders();
-            str += Body;
 
             return str;
         }

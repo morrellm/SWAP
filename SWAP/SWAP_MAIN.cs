@@ -32,7 +32,7 @@ namespace SimpleHtmlCloud
                 return _resourcePath;
             }
         }
-        private static string _page404Fname = "404_PAGE.html";
+        private static string _page404Fname = "404_page.html";
         public static string Page404
         {
             get
@@ -105,7 +105,7 @@ namespace SimpleHtmlCloud
     |dependences.                                               |
     |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
     */
-    class HtmlGenerator
+    /*class HtmlGenerator
     {
         private static string _myAddr = "155.92.105.192";
         private static string _outputPath = "Resources\\";
@@ -383,6 +383,7 @@ namespace SimpleHtmlCloud
             return forPaths;
         }
     }
+     */
 
  
     /*
@@ -485,18 +486,13 @@ namespace SimpleHtmlCloud
         {
             string request = ReadRequest();//DONE
 
-            var response = ProcessRequest(request);//DONE for now (1/30/2014)
+            ProcessRequest(request);//DONE for now (1/30/2014)
 
-            if (response != null)//this occurs when an server error occurs
-            {
-                response.Send(_currentStream);//NOT TOUCHED YET, TODO
-            }
             _currentStream.Close();//DONE
         }
 
-        private HttpResponse ProcessRequest(string request)
+        private void ProcessRequest(string request)
         {
-            HttpResponse response;
             var header = "";
             var body = "";
 
@@ -512,20 +508,18 @@ namespace SimpleHtmlCloud
             if (resource.Equals("/"))
             {
                 //goto homepage
-                response = createResponse(Program.HomePage);//should be home page
+                SendResponse(Program.HomePage);//should be home page
                
             }
             else
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
-                response = createResponse(resource);
+                SendResponse(resource);
             }
-
-            return response;
         }
 
-        private HttpResponse createResponse(string resource)
+        private void SendResponse(string resource)
         {
             HttpResponse response = null;
             Console.Write(Program.ResourcePath + resource+" | Exists = ");
@@ -533,36 +527,33 @@ namespace SimpleHtmlCloud
 
             if (File.Exists(Program.ResourcePath + resource))//200 OK
             {
-           
                 response = new HttpResponse(200);
-                var body = "";
                 var fs = new FileStream(Program.ResourcePath + resource, FileMode.Open, FileAccess.Read);
-                char[] file = null;
 
-                if (fs.Length <= 30000000)//if the file is less than 30MB
-                {
-                    file = loadFile(fs);
-                }
-                else
-                {
-                    response.SendErrorMessage(_currentStream, 100);
-                    return null;
-                }
-               
                 var fileEnding = getFileType(resource);
                 bool isText = true;
 
-                isText = response.SetContentType(fileEnding);//sets the Content-Type of a respones and checks if the type is text
+                if (fs.Length <= 30000000)//if the file is less than 30MB send normally
+                {
+                    string[] rName = resource.Split('/');
+                    isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
 
-                Console.Error.WriteLine("isText? -->"+isText);
-         
-                 //text files are attached to the body in this way
-                body = new String(file);
-                
-                response.Body = body;
-          
-                response.SetHeader("Content-Length", "" + fs.Length);
-                fs.Close();
+                    Console.Error.WriteLine("isText? -->" + isText);
+
+                    response.SetHeader("Content-Length", "" + fs.Length);
+
+                    response.Send(_currentStream, fs);
+                }
+                else//send chunked
+                {
+                    string[] rName = resource.Split('/');
+                    isText = response.SetContentType(fileEnding, rName[rName.Length-1]);
+                    response.SetHeader("Transfer-Encoding", "chunked");
+                    response.SetHeader("Content-Length", "" + fs.Length);
+                    response.SendChunked(_currentStream, fs);
+                }
+
+                fs.Close(); 
             }
             else//404 File Not Found
             {
@@ -570,19 +561,14 @@ namespace SimpleHtmlCloud
                 //checks if user specified 404 page exists
                 if (File.Exists(Program.ResourcePath + Program.Page404))
                 {
-                   // byte[] file = loadFile(Program.ResourcePath + Program.Page404);
-
-                }
-                else
-                {
-                    var body = "<!DOCTYPE HTML><html><head><style>footer{font-size:0.95em;text-align:center;}</style><title>404 Page Not Found</title></head><body>The requested resource couldn't be found.<br />"+
-                               "<hr></body><footer>SWAP auto generated 404 page.</footer></html>";
-                    response.Body = body;
+                    FileStream fs = File.Open(Program.ResourcePath + Program.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
-                    response.SetHeader("Content-Length", ""+body.Length);
+                    response.SetHeader("Content-Length", "" + fs.Length);
+                    response.Send(_currentStream, fs);
+                    fs.Close(); 
                 }
+                   
             }
-            return response;
         }
         
         private string getFileType(string fileName)
