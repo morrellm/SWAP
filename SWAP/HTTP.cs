@@ -68,7 +68,7 @@ namespace HTTP
 
             var toSend = "";
             Console.WriteLine("" + fs.Length);
-            toSend = GetHeaders() + ReadFile(fs);
+            toSend = GetHeaders();
 
             if (ContainsHeader("Content-Length"))
             {
@@ -77,23 +77,17 @@ namespace HTTP
 
             //sends response
             SendString(strm, toSend);
+            SendFile(strm, fs);
 
 
             return result;
         }
 
-        private string ReadFile(FileStream fs)
+        private void SendFile(Stream strm, FileStream fs)
         {
-            var fileContent = "";
-
             byte[] buffer = new byte[fs.Length];
             fs.Read(buffer, 0, (int)fs.Length);
-            for(int i = 0; i < fs.Length; i++)
-            {
-                fileContent += "" + (char)buffer[i];
-            }
-
-            return fileContent;
+            strm.Write(buffer, 0, (int)buffer.Length);
         }
 
         public bool SendChunked(Stream strm, FileStream fs)
