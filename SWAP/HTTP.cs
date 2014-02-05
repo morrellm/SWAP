@@ -121,7 +121,7 @@ namespace HTTP
             //sending can now begin
             SendString(strm, toSend);
             var ind = 0;
-            var chunkSize = 100;//10 Bytes chunk size
+            var chunkSize = 1000;//1kB chunk size
             bool stop = false;//stop sending?
 
             while (fs.Length > ind && !stop)
@@ -138,15 +138,14 @@ namespace HTTP
 
 
                 fs.Read(chunkBuffer, 0, chunkSize);
-                for (int i = 0; i < chunkSize; i++)
+                bool tempStop3 = !SendString(strm, chunk);
+                bool tempStop = !SendBytes(strm, chunkBuffer);
+                bool tempStop2 = !SendString(strm, "\r\n");
+                if (tempStop && tempStop2 && tempStop3)
                 {
-                    chunk += "" + (char)chunkBuffer[i];
-                    
+                    stop = true;
                 }
-                chunk += "\r\n";
-                stop = !SendString(strm, chunk);
                 
-
                 ind += chunkSize;
             }
             if (!stop)
@@ -158,7 +157,31 @@ namespace HTTP
 
             return result;
         }
+        private bool SendBytes(Stream strm, byte[] bytesToSend)
+        {
+            bool result = false;
 
+            try
+            {
+                strm.Write(bytesToSend, 0, bytesToSend.Length);
+                strm.Flush();
+                result = true;
+            }
+            catch (IOException ioe)
+            {
+                Console.Error.WriteLine(ioe.ToString());
+                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
+                                        "!  An IOException occured while trying to send a response!        ! \n" +
+                                        "!  Causes:                                                        ! \n" +
+                                        "!  1) The client voulntarily closed the output stream             ! \n" +
+                                        "!  2) This machine has lost connection to the Internet            ! \n" +
+                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
+                                        "!     closed the output stream                                    ! \n" +
+                                        "!-----------------------------------------------------------------!");
+            }
+
+            return result;
+        }
         private bool SendString(Stream strm, string strToSend)
         {
             bool result = false;

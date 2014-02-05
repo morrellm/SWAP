@@ -92,7 +92,8 @@ namespace SimpleHtmlCloud
             served++;
             Console.WriteLine("Total connections served: " + served);
             Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint.ToString());
-            new RequestHandler(connection);
+            Thread t = new Thread(() => new RequestHandler(connection));
+            t.Start();
         }
 
     }
