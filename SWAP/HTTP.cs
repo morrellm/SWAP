@@ -83,11 +83,29 @@ namespace HTTP
             return result;
         }
 
-        private void SendFile(Stream strm, FileStream fs)
+        private bool SendFile(Stream strm, FileStream fs)
         {
+            bool result = false;
             byte[] buffer = new byte[fs.Length];
             fs.Read(buffer, 0, (int)fs.Length);
-            strm.Write(buffer, 0, (int)buffer.Length);
+            try
+            {
+                strm.Write(buffer, 0, (int)buffer.Length);
+                result = true;
+            }
+            catch (IOException ioe)
+            {
+                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
+                                        "!  An IOException occured while trying to send a response!        ! \n" +
+                                        "!  Causes:                                                        ! \n" +
+                                        "!  1) The client voulntarily closed the output stream             ! \n" +
+                                        "!  2) This machine has lost connection to the Internet            ! \n" +
+                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
+                                        "!     closed the output stream                                    ! \n" +
+                                        "!-----------------------------------------------------------------!");
+            }
+
+            return result;
         }
 
         public bool SendChunked(Stream strm, FileStream fs)
@@ -161,7 +179,7 @@ namespace HTTP
             }
             catch (IOException ioe)
             {
-                Console.Error.WriteLine("!-----------------------------------------------------------------! \n" +
+                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
                                         "!  An IOException occured while trying to send a response!        ! \n" +
                                         "!  Causes:                                                        ! \n" +
                                         "!  1) The client voulntarily closed the output stream             ! \n" +

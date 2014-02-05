@@ -91,6 +91,7 @@ namespace SimpleHtmlCloud
         {
             served++;
             Console.WriteLine("Total connections served: " + served);
+            Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint.ToString());
             new RequestHandler(connection);
         }
 
@@ -486,7 +487,7 @@ namespace SimpleHtmlCloud
         {
             string request = ReadRequest();//DONE
 
-            ProcessRequest(request);//DONE for now (1/30/2014)
+            ProcessRequest(request);//DONE for now (2/4/2014)
 
             _currentStream.Close();//DONE
         }
@@ -633,11 +634,9 @@ namespace SimpleHtmlCloud
                 header += "" + (char)sr.Read();
 
             }
-            Console.WriteLine(header);
 
             //reads body(if any)
             //TODO add the ability to read a body (POST method)
-
 
             request = header + body;
 
