@@ -475,26 +475,15 @@ namespace HTTP
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpRequest object
         private Hashtable headers = new Hashtable();
         private const string MethodKey = "method";
-        private ArrayList _body = new ArrayList();
+        private string _body = "";
+        private Hashtable _query;
 
-        public ArrayList Body
+        public string Body
         {
             get { return _body; }
             set
             {
-                var methodHeader = ((string)headers[MethodKey]);
-
-                if (methodHeader.Contains("POST"))
-                {
-                    foreach (object con in value)
-                    {
-                        _body.Add(con);
-                    }
-                }
-                else
-                {
-                    throw new NotSupportedException("You can put a body in a non-POST request method in this implementation");
-                }
+                _body = value;
             }
         }
 
@@ -506,12 +495,28 @@ namespace HTTP
             SetRequestMethod(meth, resource);
         }
 
-        public HttpRequest(Method meth, string resource, ArrayList bodyItems)
+        public HttpRequest(Method meth, string resource, string body)
             : this(meth, resource)
         {
-            Body = bodyItems;
+            Body = body;
         }
 
+        public void SetQuery(string[] query)
+        {
+            for (int i = 0; i < query.Length; i++)
+            {
+                var tokens = query[i].Split('=');
+                try
+                {
+                    _query.Add(tokens[0], tokens[1]);
+                }
+                catch (IndexOutOfRangeException iore)
+                {
+                    _query.Add(tokens[0], "");
+                }
+                
+            }
+        }
         public void SetRequestMethod(Method meth, string resource)
         {
             var methodHeader = "";
@@ -562,11 +567,29 @@ namespace HTTP
             return value;
         }
 
+        private string GetQuery()
+        {
+            var query = "";
+
+            int i = 0;
+            foreach(string key in _query.Keys)
+            {
+                query += key+"="+_query[key];
+                if (i != _query.Keys.Count - 1)
+                {
+                    query += "&";
+                }
+                i++;
+            }
+
+            return query;
+        }
+
         public override string ToString()
         {
             string str = "";
 
-            str += headers[MethodKey] + "\r\n";
+            str += headers[MethodKey] + "?" + GetQuery();
 
             int count = 0;
             foreach (string headerName in headers.Keys)
@@ -595,10 +618,7 @@ namespace HTTP
             //header-body seperation
             str += "\r\n";
 
-            for (int i = 0; i < _body.Count; i++)
-            {
-                str += _body[i] + "\r\n";
-            }
+            str += Body;
 
 
             return str;

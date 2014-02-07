@@ -497,6 +497,7 @@ namespace SimpleHtmlCloud
         {
             var header = "";
             var body = "";
+            HttpRequest httpRequest = null;
 
             var headerLength = request.IndexOf("\r\n\r\n") + "\r\n\r\n".Length;
 
@@ -505,6 +506,24 @@ namespace SimpleHtmlCloud
             body = request.Substring(headerLength);
 
             var resource = GetResource(header);
+
+            setupRequest(header, body);
+
+            if (resource.Contains("?"))
+            {
+                string[] query;
+                int startQuery =resource.IndexOf("?")+1;
+                Console.WriteLine("Resource: " + resource);
+                query = resource.Substring(startQuery).Split('&');
+                foreach( string va in query)
+                {
+                    Console.WriteLine("Query: "+va);
+                }
+                //removes query and stores it to the request
+                resource = resource.Substring(0, startQuery-1);
+                httpRequest.SetQuery(query);
+
+            }
 
 
             if (resource.Equals("/"))
@@ -519,6 +538,10 @@ namespace SimpleHtmlCloud
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
                 SendResponse(resource);
             }
+        }
+        private HttpRequest setupRequest(string header, string body)
+        {
+            return null;//TODO (2/7/2014)
         }
 
         private void SendResponse(string resource)
@@ -626,8 +649,10 @@ namespace SimpleHtmlCloud
             var request = "";
             var sr = new StreamReader(_currentStream);
 
+            
             var header = "";
             var body = "";
+            
 
             //reads header
             while (!header.Contains("\r\n\r\n"))
@@ -635,9 +660,14 @@ namespace SimpleHtmlCloud
                 header += "" + (char)sr.Read();
 
             }
-
-            //reads body(if any)
-            //TODO add the ability to read a body (POST method)
+            Console.WriteLine(header);
+            if (header.Contains("POST") || header.Contains("post")) 
+            {
+                while (!body.Contains("\r\n\r\n"))
+                {
+                    body += ""+(char)sr.Read();
+                }
+            }
 
             request = header + body;
 
