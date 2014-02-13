@@ -476,7 +476,7 @@ namespace HTTP
         private Hashtable headers = new Hashtable();
         private const string MethodKey = "method";
         private string _body = "";
-        private Hashtable _query;
+        private Hashtable _query = new Hashtable();
 
         public string Body
         {
@@ -487,12 +487,18 @@ namespace HTTP
             }
         }
 
-        public enum Method { Get, Head, Post, Options };
+        public enum Method { Get, Head, Post, Options, Null };
 
 
         public HttpRequest(Method meth, string resource)
         {
             SetRequestMethod(meth, resource);
+        }
+
+        public HttpRequest(string meth, string resource, string body)
+        {
+            SetRequestMethod(StringToMethod(meth), resource);
+            Body = body;
         }
 
         public HttpRequest(Method meth, string resource, string body)
@@ -510,11 +516,11 @@ namespace HTTP
                 {
                     _query.Add(tokens[0], tokens[1]);
                 }
-                catch (IndexOutOfRangeException iore)
+                catch (IndexOutOfRangeException ioore)
                 {
                     _query.Add(tokens[0], "");
                 }
-                
+
             }
         }
         public void SetRequestMethod(Method meth, string resource)
@@ -548,6 +554,30 @@ namespace HTTP
         {
             headers.Add(header, value);
         }
+
+        private Method StringToMethod(string meth)
+        {
+            Method method = Method.Null;
+
+            if (meth.ToLower().Equals("get"))
+            {
+                method = Method.Get;
+            }
+            else if (meth.ToLower().Equals("head"))
+            {
+                method = Method.Head;
+            }
+            else if (meth.ToLower().Equals("options"))
+            {
+                method = Method.Options;
+            }
+            else if (meth.ToLower().Equals("post"))
+            {
+                method = Method.Post;
+            }
+
+            return method;
+        }
         /// <summary>
         /// Attempts to get a specified header, if the header
         /// is in the found in this requests header it returns
@@ -572,15 +602,23 @@ namespace HTTP
             var query = "";
 
             int i = 0;
-            foreach(string key in _query.Keys)
+            try
             {
-                query += key+"="+_query[key];
-                if (i != _query.Keys.Count - 1)
+                foreach(string key in _query.Keys)
                 {
-                    query += "&";
+                    query += key+"="+_query[key];
+                    if (i != _query.Keys.Count - 1)
+                    {
+                        query += "&";
+                    }
+                    i++;
                 }
-                i++;
             }
+            catch (NullReferenceException nre)
+            {
+                //thrown if no queries are in the hashtable
+            }
+            
 
             return query;
         }
@@ -589,7 +627,16 @@ namespace HTTP
         {
             string str = "";
 
-            str += headers[MethodKey] + "?" + GetQuery();
+            var mod = (String)headers[MethodKey];
+            int queryIns = mod.LastIndexOf(" ");
+            var query = GetQuery();
+
+            if (query != null && !query.Equals("")) 
+            {
+                mod = mod.Insert(queryIns, "?" + GetQuery() + " ");
+            }            
+
+            str += mod+"\r\n";
 
             int count = 0;
             foreach (string headerName in headers.Keys)

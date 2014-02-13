@@ -54,8 +54,8 @@ namespace SimpleHtmlCloud
         public Program()
         {
             var server = new HttpServer(this);
-            _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1) );
-            _resourcePath = _workingPath+_resourcePath;
+            _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
+            _resourcePath = _workingPath + _resourcePath;
             server.Start();
         }
 
@@ -507,7 +507,7 @@ namespace SimpleHtmlCloud
 
             var resource = GetResource(header);
 
-            setupRequest(header, body);
+            httpRequest = setupRequest(header, body);
 
             if (resource.Contains("?"))
             {
@@ -541,7 +541,31 @@ namespace SimpleHtmlCloud
         }
         private HttpRequest setupRequest(string header, string body)
         {
-            return null;//TODO (2/7/2014)
+            var firstLine = header.Substring(0, header.IndexOf("\r\n"));
+            var reqMethod = firstLine.Split(' ')[0];
+            var resource = firstLine.Split(' ')[1];
+            HttpRequest request = new HttpRequest(reqMethod, resource, body);
+
+            string[] lines = header.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+            for (int i = 1; i < lines.Length; i++)
+            {
+                string[] curTokens = lines[i].Split(':');
+
+                try
+                {
+                    request.AddHeader(curTokens[0], curTokens[1]);
+                }
+                catch (IndexOutOfRangeException ioore)
+                {
+                    //header is not added if there are not two tokens
+                }
+                
+            }
+
+            Console.WriteLine("REQUEST OBJECT:\n---------------\n"+request);
+
+            return request;
         }
 
         private void SendResponse(string resource)
@@ -660,7 +684,7 @@ namespace SimpleHtmlCloud
                 header += "" + (char)sr.Read();
 
             }
-            Console.WriteLine(header);
+
             if (header.Contains("POST") || header.Contains("post")) 
             {
                 while (!body.Contains("\r\n\r\n"))
