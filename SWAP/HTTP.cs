@@ -20,6 +20,8 @@ namespace HTTP
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpResponse object
         private Hashtable headers = new Hashtable();
         private const string STATUS_LINE = "status";
+        private string CRLF = "\r\n";
+
 
         public HttpResponse(int statusCode)
         {
@@ -62,7 +64,7 @@ namespace HTTP
             SetHeader(STATUS_LINE, headerStart);
         }
 
-        public bool Send(Stream strm, FileStream fs)//TODO 1/30/2014
+        public bool Send(Stream strm, ref FileStream fs)//TODO 1/30/2014
         {
             bool result = false;
 
@@ -76,14 +78,35 @@ namespace HTTP
             }
 
             //sends response
-            SendString(strm, toSend);
-            SendFile(strm, fs);
+            SendString(ref strm, ref toSend);
+            SendFile(ref strm, ref fs);
 
 
             return result;
         }
 
-        private bool SendFile(Stream strm, FileStream fs)
+        public bool Send(Stream strm, ref String body)//TODO 1/30/2014
+        {
+            bool result = false;
+
+            var headers = "";
+            Console.WriteLine("" + body.Length);
+            headers = GetHeaders();
+
+            if (ContainsHeader("Content-Length"))
+            {
+                DeleteHeader("Transfer-Encoding");
+            }
+
+            //sends response
+            SendString(ref strm, ref headers);
+            SendString(ref strm, ref body);
+
+
+            return result;
+        }
+
+        private bool SendFile(ref Stream strm, ref FileStream fs)
         {
             bool result = false;
             byte[] buffer = new byte[fs.Length];
@@ -108,7 +131,7 @@ namespace HTTP
             return result;
         }
 
-        public bool SendChunked(Stream strm, FileStream fs)
+        public bool SendChunked(Stream strm, ref FileStream fs)
         {
             bool result = true;
             var toSend = GetHeaders();
@@ -119,7 +142,7 @@ namespace HTTP
             }
           
             //sending can now begin
-            SendString(strm, toSend);
+            SendString(ref strm, ref toSend);
             var ind = 0;
             var chunkSize = 1000;//1kB chunk size
             bool stop = false;//stop sending?
@@ -138,9 +161,9 @@ namespace HTTP
 
 
                 fs.Read(chunkBuffer, 0, chunkSize);
-                bool tempStop3 = !SendString(strm, chunk);
-                bool tempStop = !SendBytes(strm, chunkBuffer);
-                bool tempStop2 = !SendString(strm, "\r\n");
+                bool tempStop3 = !SendString(ref strm, ref chunk);
+                bool tempStop = !SendBytes(ref strm, ref chunkBuffer);
+                bool tempStop2 = !SendString(ref strm, ref CRLF);
                 if (tempStop && tempStop2 && tempStop3)
                 {
                     stop = true;
@@ -152,12 +175,12 @@ namespace HTTP
             {
                 //sends the final zero
                 string chunkEnder = "0\r\n";
-                SendString(strm, chunkEnder);
+                SendString(ref strm, ref chunkEnder);
             }
 
             return result;
         }
-        private bool SendBytes(Stream strm, byte[] bytesToSend)
+        private bool SendBytes(ref Stream strm, ref byte[] bytesToSend)
         {
             bool result = false;
 
@@ -182,7 +205,7 @@ namespace HTTP
 
             return result;
         }
-        private bool SendString(Stream strm, string strToSend)
+        private bool SendString(ref Stream strm, ref string strToSend)
         {
             bool result = false;
 
@@ -475,6 +498,22 @@ namespace HTTP
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpRequest object
         private Hashtable headers = new Hashtable();
         private const string MethodKey = "method";
+        private Method _requestMethod = Method.Null;
+        private String _resource = "/";
+
+        public String Resource
+        {
+            get
+            {
+                return _resource;
+            }
+        }
+        
+
+        public Method RequestMethod
+        {
+            get { return _requestMethod; }
+        }
         private string _body = "";
         private Hashtable _query = new Hashtable();
 
@@ -541,11 +580,15 @@ namespace HTTP
                 case Method.Options:
                     methodHeader += "OPTIONS";
                     break;
+                case Method.Null:
+                    methodHeader += "NULL";
+                    break;
                 default:
                     //should be impossible to get here
                     throw new Exception("Congraulations, you managed to pass this method an invalid HttpRequest.Method enum type.");
             }
-
+            _requestMethod = meth;
+            _resource = resource;
             methodHeader += " " + resource + " HTTP/1.1";
 
             AddHeader(MethodKey, methodHeader);

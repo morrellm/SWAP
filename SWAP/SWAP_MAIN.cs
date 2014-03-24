@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.IO;
 using HTTP;
+using PHP_PARSER;
 
 namespace SimpleHtmlCloud
 {
@@ -40,7 +41,7 @@ namespace SimpleHtmlCloud
                 return _page404Fname;
             }
         }
-        private static string _homePage = "home_page.html";
+        private static string _homePage = "orbsPage.html";
         public static string HomePage
         {
             get
@@ -56,6 +57,7 @@ namespace SimpleHtmlCloud
             var server = new HttpServer(this);
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
             _resourcePath = _workingPath + _resourcePath;
+            PHP_SAPI.initParser("");
             server.Start();
         }
 
@@ -92,7 +94,7 @@ namespace SimpleHtmlCloud
             served++;
             Console.WriteLine("Total connections served: " + served);
             Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint.ToString());
-            Thread t = new Thread(() => new RequestHandler(connection));
+            Thread t = new Thread(() => new RequestHandler(ref connection));
             t.Start();
         }
 
@@ -475,7 +477,7 @@ namespace SimpleHtmlCloud
         /// This method takes a TcpClient in and attempts to read, process and respond to an HTTP/1.1 request
         /// </summary>
         /// <param name="client">A TcpClient (pressumably with an HTTP request) to handle</param>
-        public RequestHandler(TcpClient client)
+        public RequestHandler(ref TcpClient client)
         {
             _currentStream = client.GetStream();
             HandleRequest();
@@ -507,7 +509,7 @@ namespace SimpleHtmlCloud
 
             var resource = GetResource(header);
 
-            httpRequest = setupRequest(header, body);
+            httpRequest = setupRequest(ref header, ref body);
 
             if (resource.Contains("?"))
             {
@@ -529,17 +531,18 @@ namespace SimpleHtmlCloud
             if (resource.Equals("/"))
             {
                 //goto homepage
-                SendResponse(Program.HomePage);//should be home page
+                var home = Program.HomePage;
+                SendResponse(ref home, ref httpRequest);//should be home page
                
             }
             else
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
-                SendResponse(resource);
+                SendResponse(ref resource, ref httpRequest);
             }
         }
-        private HttpRequest setupRequest(string header, string body)
+        private HttpRequest setupRequest(ref string header, ref string body)
         {
             var firstLine = header.Substring(0, header.IndexOf("\r\n"));
             var reqMethod = firstLine.Split(' ')[0];
@@ -568,7 +571,7 @@ namespace SimpleHtmlCloud
             return request;
         }
 
-        private void SendResponse(string resource)
+        private void SendResponse(ref string resource, ref HttpRequest request)
         {
             HttpResponse response = null;
             Console.Write(Program.ResourcePath + resource+" | Exists = ");
@@ -580,27 +583,38 @@ namespace SimpleHtmlCloud
                 var fs = new FileStream(Program.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
                 var fileEnding = getFileType(resource);
-                bool isText = true;
-
-                if (fs.Length <= 30000000)//if the file is less than 30MB send normally
+                if (fileEnding.Equals("php"))
                 {
+                    var body = PHP_SAPI.Parse(Program.ResourcePath + resource, request);
                     string[] rName = resource.Split('/');
-                    isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
-
-                    Console.Error.WriteLine("isText? -->" + isText);
-
-                    response.SetHeader("Content-Length", "" + fs.Length);
-
-                    response.Send(_currentStream, fs);
+                    response.SetContentType("html", rName[rName.Length - 1]);
+                    response.SetHeader("Content-Length", ""+body.Length);
+                    response.Send(_currentStream, ref body);
                 }
-                else//send chunked
+                else
                 {
-                    string[] rName = resource.Split('/');
-                    isText = response.SetContentType(fileEnding, rName[rName.Length-1]);
-                    response.SetHeader("Transfer-Encoding", "chunked");
-                    response.SetHeader("Content-Length", "" + fs.Length);
-                    response.SendChunked(_currentStream, fs);
+                    bool isText = true;
+
+                    if (fs.Length <= 30000000)//if the file is less than 30MB send normally
+                    {
+                        string[] rName = resource.Split('/');
+                        isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
+
+                        Console.Error.WriteLine("isText? -->" + isText);
+
+                        response.SetHeader("Content-Length", "" + fs.Length);
+                        response.Send(_currentStream, ref fs);
+                    }
+                    else//send chunked
+                    {
+                        string[] rName = resource.Split('/');
+                        isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);
+                        response.SetHeader("Transfer-Encoding", "chunked");
+                        response.SetHeader("Content-Length", "" + fs.Length);
+                        response.SendChunked(_currentStream, ref fs);
+                    }
                 }
+                
 
                 fs.Close(); 
             }
@@ -613,7 +627,7 @@ namespace SimpleHtmlCloud
                     FileStream fs = File.Open(Program.ResourcePath + Program.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
                     response.SetHeader("Content-Length", "" + fs.Length);
-                    response.Send(_currentStream, fs);
+                    response.Send(_currentStream, ref fs);
                     fs.Close(); 
                 }
                    

@@ -1,0 +1,105 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+<title>Orb's Beta</title>
+<script type='text/javascript'>
+    var xmlhttp,
+        xmlDoc;
+        
+    if (window.XMLHttpRequest){
+        xmlhttp = new XMLHttpRequest();
+    }else{
+        xmlhttp = new ActiveXObject("Microsoft.XMLHTTP");
+    }
+    xmlhttp.open("GET", "orbsXML.xml", true);
+    xmlhttp.send();
+    xmlDoc = xmlhttp.responseXML;
+    
+    function gotoPage(page){
+        var toWrite = xmlhttp.responseXML.documentElement.getElementsByTagName(page),
+            contentId = document.getElementById('Content'),
+            i;
+
+        contentId.innerHTML = toWrite[0].innerHTML;
+    }
+</script>
+<style type='text/css'>
+h1
+{
+margin:12px;
+padding:6px;
+text-align:center;
+color:#AAAAFF;
+text-shadow:2px 2px #3A10AA;
+}
+#navbar
+{
+text-align:center;
+font-family:Times New Roman;
+font-size:24px;
+text-align:center; 
+display:block;
+}
+a
+{
+display:inline-block;
+width:196px;
+height: 32px;
+background-color: rgb(100, 10, 250);
+background-repeat: repeat-x;
+background-size: contain;
+border: outset;
+text-decoration:none;
+color:#FFFF00;
+padding:6px;
+}
+a:hover
+{
+    color: rgb(200, 200, 0);
+}
+a:active
+{
+    border: solid;
+}
+#main
+{
+background-color:#AAAAAA;
+width:480px;
+height:760px;
+text-align:center;
+margin:auto;
+}
+footer
+{
+font-size:10px;
+text-align:center;
+}
+.btn
+{
+    background-color: rgb(100, 255, 10);
+}
+</style>
+</head>
+<body>
+<span id='navbar'><a onclick="gotoPage('NEWS')">News</a><a onclick="gotoPage('CONTACT')">Contact Info</a><a onclick="gotoPage('ABOUT')">About</a></span>
+<hr />
+<div id='Content'>
+    <h1>Orb's Beta News</h1>
+    <button class="btn">
+        Test
+    </button>
+    <select onchange='gotoPage(this.value)'>
+        <option>NEWS</option>
+        <option>CONTACT</option>
+        <option>ABOUT</option>
+    </select>
+    <p id='main'>
+    Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt. Cras dapibus. Vivamus elementum semper nisi. Aenean vulputate eleifend tellus. Aenean leo ligula, porttitor eu, consequat vitae, eleifend ac, enim. Aliquam lorem ante, dapibus in, viverra quis, feugiat a, tellus. Phasellus viverra nulla ut metus varius laoreet. Quisque rutrum. Aenean imperdiet. Etiam ultricies nisi vel augue. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum. Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante. Etiam sit amet orci eget eros faucibus tincidunt. Duis leo. Sed fringilla mauris sit amet nibh. Donec sodales sagittis magna. Sed consequat, leo eget bibendum sodales, augue velit cursus nunc, 
+    </p>
+    <hr />
+    <footer>
+    Mitchell Morrell 2014
+    </footer>
+</div>
+</body>
+</html>

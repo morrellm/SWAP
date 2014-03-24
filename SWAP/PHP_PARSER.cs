@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.IO;
+using System.Diagnostics;
 using HTTP;
 
 namespace PHP_PARSER
@@ -16,7 +17,7 @@ namespace PHP_PARSER
      */
     public static class PHP_SAPI
     {
-        public static string phpLoc = "";
+        public static string phpLoc = "D:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
 
        /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
@@ -64,33 +65,78 @@ namespace PHP_PARSER
         }
         
 
-        public static HttpResponse Parse(string fname, HttpRequest request)
+        public static String Parse(string pathname, HttpRequest request)//THIS METHOD DOESNT ACCOUNT FOR INCLUDED FILES AND WILL NOT PROPERLY PARSER PHP FILES WITH INCLUSIONS!!!
         {
-            HttpResponse response = null;
-            if (File.Exists(fname))
+            
+            var body = "";
+            if (File.Exists(pathname))
             {
                 //200 have script, will parse
-                response = new HttpResponse(200);
-                setSuperGlobals(request);
-            }
-            else
-            {
-                //404 script not found
-                response = new HttpResponse(404);
+                string prepend = setSuperGlobals(request);
+
+                FileStream tfs = File.Create(Directory.GetCurrentDirectory()+"\\temp.php");
+                FileStream mfs = File.OpenRead(pathname);
+                var buffer = new byte[prepend.Length + mfs.Length];
+                String output = prepend;
+
+                for (int i = 0; i < prepend.Length; i++)
+                {
+                    buffer[i] = (byte)prepend[i];
+                }
+
+
+                var startOffset = prepend.Length;
+                mfs.Read(buffer, startOffset, (int)mfs.Length);
+                
+                
+                tfs.Write(buffer, 0, buffer.Length);
+
+                mfs.Close();
+                tfs.Close();
+
+                ProcessStartInfo psi = new ProcessStartInfo(phpLoc + "php.exe", "\""+Directory.GetCurrentDirectory()+"\\temp.php"+"\"");
+                
+                psi.RedirectStandardInput = true;
+                psi.RedirectStandardOutput = true;
+                psi.UseShellExecute = false;
+                Process parser = new Process();
+
+                parser.StartInfo = psi;
+
+                parser.Start();
+                            
+                
+                StreamReader sr = parser.StandardOutput;
+
+                body = sr.ReadToEnd();
+
+                File.Delete(Directory.GetCurrentDirectory() + "\\temp.php");
+                parser.Close();
+                Console.WriteLine("Parsed PHP in file "+pathname);
             }
 
-            return response;
+            return body;
         }
         /// <summary>
         /// This method sets superglobals to their correct values based upon the httpRequest invoking the php file.
         /// This method should be called before parsing a php file
         /// </summary>
         /// <param name="request">the request from which to extract the datas</param>
-        private static void setSuperGlobals(HttpRequest request)
+        private static String setSuperGlobals(HttpRequest request)
         {
-            //SERVER_ADDR, SERVER_NAME, SERVER_SOFTWARE, SERVER_PROTOCOL
-            request.GetValue("Host");//SERVER_ADDR
+            String phpPrepend = "<?php\n";
+
+            //SERVER_ADDR, SERVER_NAME, SERVER_SOFTWARE-X, SERVER_PROTOCOL-X
+            phpPrepend += "$_SERVER['SERVER_SOFTWARE'] = \"Simple Webserver with PHP v0.1\";\n";
+            phpPrepend += "$_SERVER['SERVER_ADDR'] = \"" + request.GetValue("Host") + "\";\n";//SERVER_ADDR
+            phpPrepend += "$_SERVER['PHP_SELF'] = \"" + request.Resource + "\";\n";
+            phpPrepend += "$_SERVER['SCRIPT_NAME'] = \""+request.Resource+"\";\n";
+            phpPrepend += "$_SERVER['SERVER_PROTOCOL'] = \"HTTP/1.1\";\n";
+            phpPrepend += "$_SERVER['GATEWAY_INTERFACE'] = \"5.4.4\";\n";
+            phpPrepend += "$_SERVER['SERVER_NAME'] = '" + request.GetValue("Host") + "';\n";
+            phpPrepend += "$_SERVER['HTTP_HOST'] = '"+request.GetValue("Host") +"';\n";
             request.GetValue("Accept");
+            var method = request.RequestMethod;
             //REQUEST_METHOD, REQUEST_TIME
             //QUERY_STRING
             //HTTP_ACCEPT, HTTP_ACCEPT_CHARSET
@@ -99,9 +145,10 @@ namespace PHP_PARSER
             //SCRIPT_FILENAME
             //SERVER_ADMIN, SERVER_PORT, SERVER_SIGNATURE
             //PATH_TRANSLATED, SCRIPT_NAME, SCRIPT_URI
-            
 
-            
+            phpPrepend += "?>\n";
+
+            return phpPrepend;
         }
 
     }
