@@ -64,7 +64,7 @@ namespace HTTP
             SetHeader(STATUS_LINE, headerStart);
         }
 
-        public bool Send(Stream strm, ref FileStream fs)//TODO 1/30/2014
+        public bool Send(ref Stream strm, ref FileStream fs)
         {
             bool result = false;
 
@@ -85,7 +85,7 @@ namespace HTTP
             return result;
         }
 
-        public bool Send(Stream strm, ref String body)//TODO 1/30/2014
+        public bool Send(ref Stream strm, ref String body)
         {
             bool result = false;
 
@@ -126,12 +126,14 @@ namespace HTTP
                                         "!  3) The client lost connection to the server and invoulntarily  ! \n" +
                                         "!     closed the output stream                                    ! \n" +
                                         "!-----------------------------------------------------------------!");
+                
             }
+            fs.Close();
 
             return result;
         }
 
-        public bool SendChunked(Stream strm, ref FileStream fs)
+        public bool SendChunked(ref Stream strm, ref FileStream fs)
         {
             bool result = true;
             var toSend = GetHeaders();
@@ -147,7 +149,7 @@ namespace HTTP
             var chunkSize = 1000;//1kB chunk size
             bool stop = false;//stop sending?
 
-            while (fs.Length > ind && !stop)
+            while (!stop && fs.Length > ind)
             {
                 int remaining = (int)fs.Length - ind;
 
@@ -167,6 +169,7 @@ namespace HTTP
                 if (tempStop && tempStop2 && tempStop3)
                 {
                     stop = true;
+                    fs.Close();
                 }
                 
                 ind += chunkSize;
@@ -500,7 +503,7 @@ namespace HTTP
         private const string MethodKey = "method";
         private Method _requestMethod = Method.Null;
         private String _resource = "/";
-
+        
         public String Resource
         {
             get
@@ -517,6 +520,10 @@ namespace HTTP
         private string _body = "";
         private Hashtable _query = new Hashtable();
 
+        public Hashtable Query
+        {
+            get { return _query; }
+        }
         public string Body
         {
             get { return _body; }
@@ -661,7 +668,6 @@ namespace HTTP
             {
                 //thrown if no queries are in the hashtable
             }
-            
 
             return query;
         }

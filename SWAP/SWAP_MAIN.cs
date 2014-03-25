@@ -435,7 +435,7 @@ namespace SimpleHtmlCloud
         {
             var result = false;
 
-            if (!_isRunning)
+            if (!_isRunning)//TODO When a connection is dropped, performance suffers for subsuquent connections FIX THIS!!!!!
             {
                 _isRunning = true;
                 _server.Start();
@@ -471,7 +471,7 @@ namespace SimpleHtmlCloud
      */
     class RequestHandler
     {
-        private readonly Stream _currentStream = null;
+        private Stream _currentStream = null;
 
         /// <summary>
         /// This method takes a TcpClient in and attempts to read, process and respond to an HTTP/1.1 request
@@ -524,7 +524,7 @@ namespace SimpleHtmlCloud
                 //removes query and stores it to the request
                 resource = resource.Substring(0, startQuery-1);
                 httpRequest.SetQuery(query);
-
+                PHP_SAPI.SetQuery(httpRequest.Query);
             }
 
 
@@ -589,7 +589,7 @@ namespace SimpleHtmlCloud
                     string[] rName = resource.Split('/');
                     response.SetContentType("html", rName[rName.Length - 1]);
                     response.SetHeader("Content-Length", ""+body.Length);
-                    response.Send(_currentStream, ref body);
+                    response.Send(ref _currentStream, ref body);
                 }
                 else
                 {
@@ -603,7 +603,7 @@ namespace SimpleHtmlCloud
                         Console.Error.WriteLine("isText? -->" + isText);
 
                         response.SetHeader("Content-Length", "" + fs.Length);
-                        response.Send(_currentStream, ref fs);
+                        response.Send(ref _currentStream, ref fs);
                     }
                     else//send chunked
                     {
@@ -611,12 +611,10 @@ namespace SimpleHtmlCloud
                         isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);
                         response.SetHeader("Transfer-Encoding", "chunked");
                         response.SetHeader("Content-Length", "" + fs.Length);
-                        response.SendChunked(_currentStream, ref fs);
+                        response.SendChunked(ref _currentStream, ref fs);
                     }
                 }
                 
-
-                fs.Close(); 
             }
             else//404 File Not Found
             {
@@ -627,7 +625,7 @@ namespace SimpleHtmlCloud
                     FileStream fs = File.Open(Program.ResourcePath + Program.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
                     response.SetHeader("Content-Length", "" + fs.Length);
-                    response.Send(_currentStream, ref fs);
+                    response.Send(ref _currentStream, ref fs);
                     fs.Close(); 
                 }
                    

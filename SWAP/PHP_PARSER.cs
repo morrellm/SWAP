@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Diagnostics;
+using System.Collections;
 using HTTP;
 
 namespace PHP_PARSER
@@ -19,6 +20,7 @@ namespace PHP_PARSER
     {
         public static string phpLoc = "D:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
+        public static Hashtable _currentQuery = null;
 
        /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
                                                    "$_SERVER['GATEWAY_INTERFACE']", 	//Returns the version of the Common Gateway Interface (CGI) the server is using
@@ -114,6 +116,10 @@ namespace PHP_PARSER
                 parser.Close();
                 Console.WriteLine("Parsed PHP in file "+pathname);
             }
+            else
+            {
+                body = "<html><body>404 file not found: "+pathname+"</body></html>";
+            }
 
             return body;
         }
@@ -129,16 +135,26 @@ namespace PHP_PARSER
             //SERVER_ADDR, SERVER_NAME, SERVER_SOFTWARE-X, SERVER_PROTOCOL-X
             phpPrepend += "$_SERVER['SERVER_SOFTWARE'] = \"Simple Webserver with PHP v0.1\";\n";
             phpPrepend += "$_SERVER['SERVER_ADDR'] = \"" + request.GetValue("Host") + "\";\n";//SERVER_ADDR
-            phpPrepend += "$_SERVER['PHP_SELF'] = \"" + request.Resource + "\";\n";
-            phpPrepend += "$_SERVER['SCRIPT_NAME'] = \""+request.Resource+"\";\n";
+            phpPrepend += "$_SERVER['PHP_SELF'] = \"" + GetScriptName(request.Resource) + "\";\n";
+            phpPrepend += "$_SERVER['SCRIPT_NAME'] = \""+GetScriptName(request.Resource)+"\";\n";
             phpPrepend += "$_SERVER['SERVER_PROTOCOL'] = \"HTTP/1.1\";\n";
-            phpPrepend += "$_SERVER['GATEWAY_INTERFACE'] = \"5.4.4\";\n";
-            phpPrepend += "$_SERVER['SERVER_NAME'] = '" + request.GetValue("Host") + "';\n";
-            phpPrepend += "$_SERVER['HTTP_HOST'] = '"+request.GetValue("Host") +"';\n";
-            request.GetValue("Accept");
+            phpPrepend += "$_SERVER['GATEWAY_INTERFACE'] = \""+GATE_INTER+"\";\n";
+            phpPrepend += "$_SERVER['SERVER_NAME'] = \"" + request.GetValue("Host") + "\";\n";
+            phpPrepend += "$_SERVER['HTTP_HOST'] = \""+request.GetValue("Host") +"\";\n";
+            phpPrepend += "$_SERVER['HTTP_ACCEPT'] = \""+request.GetValue("Accept")+"\";\n";
             var method = request.RequestMethod;
             //REQUEST_METHOD, REQUEST_TIME
-            //QUERY_STRING
+
+            //QUERY_STRING-X
+            //sets queries if used
+            if (_currentQuery != null)
+            {
+                foreach (var key in _currentQuery.Keys)
+                {
+                    phpPrepend += "$_GET['" + key + "'] = \"" + _currentQuery[key] + "\";\n";
+                }
+                _currentQuery = null;
+            }
             //HTTP_ACCEPT, HTTP_ACCEPT_CHARSET
             //HTTP_HOST, HTTP_REFERER, HTTPS
             //REMOTE_ADDR, REMOTE_HOST, REMOTE_PORT
@@ -151,5 +167,22 @@ namespace PHP_PARSER
             return phpPrepend;
         }
 
+        private static string GetScriptName(string res)
+        {
+            string ret = res;
+
+            if (res.Contains("?"))
+            {
+                res = res.Substring(0, res.IndexOf("?"));
+            }
+
+            return res;
+        }
+
+
+        public static void SetQuery(Hashtable query)
+        {
+            _currentQuery = query;
+        }
     }
 }

@@ -3,6 +3,7 @@
         <title>PHP script page</title>
     </head>
     <body>
+        <a href="<?php echo $_SERVER['PHP_SELF']?>?subject=PHP&web=W3schools.com">Test $GET</a>
         <?php
             $color = "red";
             
@@ -19,16 +20,20 @@
             echo "col: $col\n";
             echo "OTHER STUFF:<br />";
             echo $_SERVER['PHP_SELF'];
-            echo "<br>";
+            echo "<br />";
             echo $_SERVER['SERVER_SOFTWARE'];
-            echo "<br>";
+            echo "<br />";
             echo $_SERVER['HTTP_HOST'];
-            echo "<br>";
+            echo "<br />";
             echo $_SERVER['HTTP_REFERER'];
-            echo "<br>";
+            echo "<br />";
             echo $_SERVER['HTTP_USER_AGENT'];
-            echo "<br>";
-            echo $_SERVER['SCRIPT_NAME'];           
+            echo "<br />";
+            echo $_SERVER['SCRIPT_NAME'];
+            echo "<br />";
+            foreach($_GET as $k => $v){
+                echo "Query[$k]: $v <br />";
+            }
             
         ?>
         
