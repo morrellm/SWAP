@@ -33,6 +33,7 @@ namespace SimpleHtmlCloud
                 return _resourcePath;
             }
         }
+        //default 404 page file name
         private static string _page404Fname = "404_page.html";
         public static string Page404
         {
@@ -41,12 +42,33 @@ namespace SimpleHtmlCloud
                 return _page404Fname;
             }
         }
-        private static string _homePage = "orbsPage.html";
+        //default page (index.html)
+        private static string _homePage = "home_page.html";
         public static string HomePage
         {
             get
             {
                 return _homePage;
+            }
+        }
+
+        //this is a token that if found in a requested resource, access will be denied
+        private static string _lockedPageToken = "LOCKED_FOLDER";
+        public static string LockedPageToken
+        {
+            get
+            {
+                return _lockedPageToken;
+            }
+        }
+
+        //default access denied page
+        private static string _accessDenied = "no_access.html";
+        public static string AccessDenied
+        {
+            get
+            {
+                return _accessDenied;
             }
         }
         private int served = 0;
@@ -527,19 +549,28 @@ namespace SimpleHtmlCloud
                 PHP_SAPI.SetQuery(httpRequest.Query);
             }
 
-
-            if (resource.Equals("/"))
+            if (!resource.Contains(".") && !resource.Contains(Program.LockedPageToken))//not a file request, therefore defaults to home_page of requested directory
             {
-                //goto homepage
-                var home = Program.HomePage;
-                SendResponse(ref home, ref httpRequest);//should be home page
-               
+                if (resource.Trim()[resource.Length - 1] != '/')//added extra / if it was not included in the request
+                {
+                    resource += "/";
+                }
+                //goto default home page
+                var path = resource + Program.HomePage;
+                path = path.Replace('/', '\\');
+                path = path.Substring(1);//gets rid of extra \ at beginning of resource path
+                SendResponse(ref path, ref httpRequest);//should be home page
             }
-            else
+            else if (!resource.Contains(Program.LockedPageToken))//requested resoure is a unrestricted file
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
                 SendResponse(ref resource, ref httpRequest);
+            }
+            else//restricted file was requested
+            {
+                var path = Program.AccessDenied;
+                SendResponse(ref path, ref httpRequest);
             }
         }
         private HttpRequest setupRequest(ref string header, ref string body)
