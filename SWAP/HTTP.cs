@@ -22,6 +22,19 @@ namespace HTTP
         private const string STATUS_LINE = "status";
         private string CRLF = "\r\n";
 
+        private int _chunkSize = 5243000;//default chunk size of 5MB
+
+        public int ChunkSize
+        {
+            get
+            {
+                return _chunkSize;
+            }
+            set
+            {
+                _chunkSize = value;
+            }
+        }
 
         public HttpResponse(int statusCode)
         {
@@ -146,7 +159,7 @@ namespace HTTP
             //sending can now begin
             SendString(ref strm, ref toSend);
             var ind = 0;
-            var chunkSize = 1000;//1kB chunk size
+            var chunkSize = _chunkSize;//predefined chunk size
             bool stop = false;//stop sending?
 
             while (!stop && fs.Length > ind)

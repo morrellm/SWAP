@@ -79,13 +79,15 @@ namespace SimpleHtmlCloud
             var server = new HttpServer(this);
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
             _resourcePath = _workingPath + _resourcePath;
+            Console.WriteLine("Server resource path initialized. Resource path = " + _resourcePath);
             PHP_SAPI.initParser("");
+            Console.WriteLine("Server PHP parser initialized.");
             server.Start();
+            Console.WriteLine("Server Started.");
         }
 
         public static void Main(String[] args)
         {
-            Console.WriteLine("Server Started.");
             new Program();
             Console.Read();
         }
