@@ -6,10 +6,11 @@ using System.Threading;
 using System.Net;
 using System.Net.Sockets;
 using System.IO;
+using System.Reflection;
 using HTTP;
 using PHP_PARSER;
 
-namespace SimpleHtmlCloud
+namespace SimpleHttpServer
 {
     class Program : IConnectionListener
     {
@@ -22,15 +23,31 @@ namespace SimpleHtmlCloud
             {
                 return _myAddr;
             }
+            set
+            {
+                _myAddr = value;
+            }
         }
 
         private static string _workingPath = Directory.GetCurrentDirectory();
         private static string _resourcePath = "\\Resources\\";
-        public static string ResourcePath
+        public static string ResourcePath 
         {
             get
             {
                 return _resourcePath;
+            }
+            set
+            {
+                if (value[0] == '\\' && value[value.Length - 1] == '\\')//checks for proper format
+                {
+                    _resourcePath = value;
+                }
+                else
+                {
+                    throw new ArgumentException("Improper path format! must include a '\\' at the beginning and end of a resource path.");//throws exception if data bad format
+                }
+                
             }
         }
         //default 404 page file name
@@ -41,6 +58,11 @@ namespace SimpleHtmlCloud
             {
                 return _page404Fname;
             }
+            set
+            {
+                if (value.Contains(".html") || value.Contains(".htm"))
+                    _page404Fname = value;
+            }
         }
         //default page (index.html)
         private static string _homePage = "home_page.html";
@@ -49,6 +71,11 @@ namespace SimpleHtmlCloud
             get
             {
                 return _homePage;
+            }
+            set
+            {
+                if (value.Contains(".html") || value.Contains(".htm"))
+                    _homePage = value;
             }
         }
 
@@ -60,6 +87,10 @@ namespace SimpleHtmlCloud
             {
                 return _lockedPageToken;
             }
+            set
+            {
+                _lockedPageToken = value;
+            }
         }
 
         //default access denied page
@@ -70,20 +101,123 @@ namespace SimpleHtmlCloud
             {
                 return _accessDenied;
             }
+            set
+            {
+                if (value.Contains(".html") || value.Contains(".htm"))
+                    _accessDenied = value;
+            }
         }
         private int served = 0;
 
         //CONSTRUCTOR********
         public Program()
         {
-            var server = new HttpServer(this);
+            var server = new HttpServer(this);//creates a new server for the program to use
+            //sets up the working path, and the resource path
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
+
+            parseConfigFile(_workingPath + "\\swap_config.cnfg");
+
+
             _resourcePath = _workingPath + _resourcePath;
-            Console.WriteLine("Server resource path initialized. Resource path = " + _resourcePath);
+
+           
+            Console.WriteLine("Server resource path initialized.\nResource path = " + _resourcePath);
             PHP_SAPI.initParser("");
             Console.WriteLine("Server PHP parser initialized.");
             server.Start();
             Console.WriteLine("Server Started.");
+        }
+
+        private void parseConfigFile(string fname)
+        {
+            bool fail = false;
+
+            if (File.Exists(fname))
+            {
+                var fs = new FileStream(fname, FileMode.Open, FileAccess.Read);
+                Console.WriteLine("Reading config file...");
+
+                //creates byte array to store the file from the file stream
+                byte[] content = new byte[fs.Length];
+                //reads the file
+                fs.Read(content, 0, (int)fs.Length);
+                //closes file
+                fs.Close();
+                string file = "";
+
+                //this loop converts the byte[] to a string
+                for (int i = 0; i < content.Length; i++)
+                {
+                    file += (char)content[i];
+                }
+
+                //divides the file's contents into lines
+                string[] line = file.Split('\n');
+
+                //parses line-by-line
+                string curStr;
+                string[] token;
+                for (int i = 0; i < line.Length; i++)
+                {
+                    curStr = line[i].Trim();
+                    if (curStr.Length != 0 && !curStr.Substring(0, 1).Equals("#"))
+                    {
+                        token = curStr.Split('=');
+                        for (int j = 0; j < token.Length; j++)
+                        {
+                            token[j] = token[j].Trim();
+                        }
+                            if (token.Length == 2)//must be 2 or something went wrong
+                            {
+                                PropertyInfo pi = this.GetType().GetProperty(token[0]);//attempts to get the specified property
+                                if (pi != null)//if the property exists it is set
+                                {
+                                    try
+                                    {
+                                        pi.SetValue(token[0], token[1]);
+                                        Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(token[0]));
+                                    }
+                                    catch (TargetInvocationException tie)//if the data is not accepted by the setter method
+                                    {
+                                        Console.WriteLine("\nInvalid format on line "+ i +" "+tie.InnerException.Message+"\n");
+                                        fail = true;
+                                    }
+                                    
+                                }
+                                else//otherwise an error message is printed because property doesn't exist
+                                {
+                                    Console.WriteLine("\nNon-existant property " + token[0] + " on line " + i+"\n");
+                                    fail = true;
+                                }
+
+                            }
+                            else//if token.Length != 2 then the syntax was not correct
+                            {
+                                Console.WriteLine("\nFailed to parse line " + i + "! \""+curStr+"\"\n");
+                                fail = true;
+                            }
+                        
+                    }
+                }
+
+            }
+            else
+            {
+                Console.WriteLine("\nCould not find "+ fname +", Server could not be started!!!");
+                fail = true;
+            }
+            if (fail)
+            {
+                Console.WriteLine("\nFailed to parse configuration file!");
+                Console.WriteLine("Press Enter to Exit...");
+                Console.Read();
+                Environment.Exit(1);
+            }
+            else
+            {
+                Console.WriteLine("\nSuccessfully read config file!\n");
+            }
         }
 
         public static void Main(String[] args)
@@ -116,303 +250,15 @@ namespace SimpleHtmlCloud
         public void Notify(TcpClient connection)
         {
             served++;
+            Console.WriteLine("--------------------------------------------------");
             Console.WriteLine("Total connections served: " + served);
-            Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint.ToString());
+            Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint);
+            Console.WriteLine("--------------------------------------------------");
             Thread t = new Thread(() => new RequestHandler(ref connection));
             t.Start();
         }
 
     }
-    /*
-     ****************************
-     * CLASS START HtmlGenerator
-     ****************************
-    |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
-    |This class is a relic from the project SWAP was born from. |
-    |This class is marked for deletion, but is kept for possible|
-    |dependences.                                               |
-    |!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!|
-    */
-    /*class HtmlGenerator
-    {
-        private static string _myAddr = "155.92.105.192";
-        private static string _outputPath = "Resources\\";
-        private static string _page404Fname = "404_PAGE.html";
-
-
-        //Prepares a html directory list for a given directory
-        public static HttpResponse PrepareHtmlDirectoryList(String directory)//TODO add this functionality (BASIC, FOR APPLICATION INITIALIZING CALL ONLY)
-        {
-            var content = "";
-            HttpResponse response;
-
-
-            //CHECK IF RESOURCE EXISTS
-
-            if (File.Exists(directory))
-            {
-                //IF YES, THEN GENERATE HTML DIRECTORY PAGE AND RETURN IT
-                response = new HttpResponse(200);
-                //the preliminary html file tags
-                content += "<html>\r\n" +
-                           "<head>\n" +
-                           "<title> M.I.A. Web File Viewer </title>\n" +
-                           "<base href=\"http://" + _myAddr + "/\">" +
-                           "<style>\n" +
-                           "body\n" +
-                           "{\n" +
-                           "text-align:center;\n" +
-                           "}\n" +
-                           "a:link, a:visited\n" +
-                           "{\n" +
-                           "font-weight:bold;\n" +
-                           "text-decoration:none;\n" +
-                           "margin:8pt;\n" +
-                           "}\n" +
-                           "a:hover\n" +
-                           "{\n" +
-                           "color:#FF4400;\n" +
-                           "font-size:150%;\n" +
-                           "}\n" +
-                           "a:active\n" +
-                           "{\n" +
-                           "color:#FFFF00;\n" +
-                           "font-size:150%;\n" +
-                           "width:180px;\n" +
-                           "}\n" +
-                           "</style>\n" +
-                           "</head>\n" +
-                           "    <body>\n";
-
-                string[] files = FormatPaths(Directory.GetFiles(directory), directory);
-
-                //creates file links
-                for (int i = 0; i < files.Length; i++)
-                {
-                    content += "            <a href= \"" + files[i] + "\">File: " + files[i] +
-                               "</href> <br> \r\n";
-                }
-
-                //closing html file tags
-                content += "        </body>\r\n" +
-                           "</html>";
-                //adds content to body
-                response.Body = content;
-                //adds headers
-                response.SetHeader("Content-Type", "text/html; charset=utf-8");
-                response.SetHeader("Content-Length", "" + content.Length);
-            }
-            else
-            {
-                response = new HttpResponse(404);
-
-                //ELSE RETURN A VALUE THAT MEANS THE RESOURCE COULD NOT BE FOUND
-                if (File.Exists(_outputPath + _page404Fname)) //checks for a premade 404 page
-                {
-                    //file reading works! tested as proof of concept
-                    var fs = File.OpenRead(_outputPath + _page404Fname);
-
-                    byte[] contents = new byte[fs.Length];
-                    fs.Read(contents, 0, (int)fs.Length);
-                    foreach (byte utf8 in contents)
-                    {
-                        char utf8Char = (char)utf8;
-                        content += "" + utf8Char;
-                    }
-                    response.Body = content;
-                }
-                else //otherwise it generates a M.I.A. default 404 page
-                {
-                    content += GeneratePage(404);
-                    response.Body = content;
-                }
-                //add headers
-                response.SetHeader("Content-Type", "text/html; charset=utf-8");
-                response.SetHeader("Content-Length", "" + content.Length);
-            }
-
-
-
-
-
-            return response;
-        }
-
-        private static string GeneratePage(int statusCode)
-        {
-            var pageContent = "";
-            pageContent += "<!DOCTYPE HTML>\n" +
-                                "<html>\n" +
-                                "<head>\n" +
-                                "<title>M.I.A. 404 Error</title>\n" +
-                                "<style>\n" +
-                                "body\n" +
-                                "{\n" +
-                                "background-color:#953100;\n" +
-                                "}\n" +
-                                "h1\n" +
-                                "{\n" +
-                                "background-color:#F00000;\n" +
-                                "color:#FFFFFF;\n" +
-                                "font-size:87px;\n" +
-                                "text-transform:uppercase;\n" +
-                                "text-align:center;\n" +
-                                "border-style:outset;\n" +
-                                "border-color:#950004;\n" +
-                                "border-width:0.1em;" +
-                                "margin-top:0px;\n" +
-                                "margin-bottom:0em;\n" +
-                                "}\n" +
-                                "\n" +
-                                "p\n" +
-                                "{\n" +
-                                "margin-left:1em;\n" +
-                                "margin-right:3em;\n" +
-                                "margin-top:1em;\n" +
-                                "font-size:16pt;\n" +
-                                "}\n" +
-                                "#author\n" +
-                                "{\n" +
-                                "font-size:0.75em;\n" +
-                                "text-align:center;\n" +
-                                "}\n" +
-                                "</style>\n" +
-                                "</head>\n";
-
-            if (statusCode == 404)
-            {
-                pageContent += "<body>\n" +
-                               "		<h1> 404 Error</h1>\n" +
-                               "		<p>\n" +
-                               "		The requested page does not exist.\n" +
-                               "		<hr />\n" +
-                               "		</p>\n" +
-                               "		<p id=\"author\">\n" +
-                               "		Page generated by M.I.A. Server File Viewer&copy(Version 0.0.21)\n" +
-                               "		</p>\n" +
-                               "	</body>\n" +
-                               "</html>";
-            }
-            else
-            {
-                pageContent += "</html>\n";
-            }
-
-
-            return pageContent;
-        }
-
-        private static string GetGlobalIp()
-        {
-            //this is a website that tells you your global ip in plaintext format
-            string response = "";
-
-            var startInd = response.IndexOf("<body>") + "<body>".Length;
-            var length = response.IndexOf("</", startInd) - startInd;
-
-            response = response.Substring(startInd, length).Trim();
-
-            string[] a = response.Split(':');
-
-            var a2 = a[1].Trim();
-
-            return a2;
-        }
-        //Prepares an appropriate file viewer html page for a given file name
-        private static void PrepareHtmlFilePage(string fname)
-        {
-            var fileExt = Path.GetExtension(fname);
-
-            string content = "<html>\r\n" +
-                             "\t<title>" + fname + "</title>\r\n" +
-                             "\t<header><b><u>File Viewer</u></b></header>\r\n" +
-                             "\t\t<body>\r\n";
-
-            if (File.Exists(fname))
-            {
-                var s = File.OpenRead(fname);
-
-                if (fileExt.Contains("txt"))
-                {
-                    var sr = new StreamReader(s);
-
-                    while (!sr.EndOfStream)
-                    {
-                        content += "" + (char)sr.Read();
-                    }
-                    content += "\r\n";
-                }
-                else if (fileExt.Contains("jpg") || fileExt.Contains("jpeg"))
-                {
-                    content += "<img src = \"" + fname + "\"></img>\r\n";
-                }
-                else
-                {
-                    content += "Unsupported File Type\r\n";
-                }
-
-                s.Close();
-            }
-            else
-            {
-                content += "File Could not be Opened.\r\n";
-            }
-
-            content += "\t\t</body>\r\n" +
-                       "</html>";
-
-            var os = File.Create(_outputPath + "Current_File.html");
-
-            if (fileExt.Contains("txt"))
-            {
-                var sw = new StreamWriter(os);
-
-                sw.Write(content);
-                sw.Flush();
-
-            }
-
-            os.Close();
-
-        }
-        /// <summary>
-        /// Gets the contents of a file and returns a string representation of the file's contents
-        /// </summary>
-        /// <param name="fname"></param>
-        /// <returns></returns>
-        private static string GetBody(string fname)
-        {
-            string body = "";
-            StreamReader sr = File.OpenText(fname);
-
-            while (!sr.EndOfStream)
-            {
-                body += "" + (char)sr.Read();
-            }
-
-            sr.Close();
-
-            return body;
-        }
-        /// <summary>
-        /// Formats a list of strings that represent file/directory paths
-        /// </summary>
-        /// <param name="unfPaths">A string array of unformatted file/directory paths</param>
-        /// <returns>The formatted version of the unformatted string list</returns>
-        private static string[] FormatPaths(string[] unfPaths, string directory)
-        {
-            string[] forPaths = new string[unfPaths.Length];
-
-            for (int i = 0; i < unfPaths.Length; i++)
-            {
-                forPaths[i] = unfPaths[i].Replace(directory, "");
-            }
-
-            return forPaths;
-        }
-    }
-     */
-
  
     /*
      ****************************

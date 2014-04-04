@@ -1,0 +1,30 @@
+#Server's Global IP address
+	MyAddress = 155.92.105.192
+
+#Server's Resource Path
+#A note, this path is relative to the location of
+#SWAP.exe. For example, if you have a folder
+#called "Resources" in the same folder as the
+#SWAP executable the ResourcePath would
+#be "\Resources\". Also, a '\' must be included
+#at the beginning and end of a ResourcePath
+#in order for it to properly work with the server
+	ResourcePath = \Resources\
+
+#Server's 404 page
+	Page404 = 404_page.html
+
+#Server's default index page (index.html)
+	HomePage = home_page.html
+
+#Server's protected path identifier
+	LockedPageToken = LOCKED_FOLDER
+
+#^this is used to hide certain folders/files from a remote user.
+#Requested folders or files that have this token in their path name
+#will return a access denied page
+
+#Server's access denied page
+	AccessDenied = no_access.html
+
+	
