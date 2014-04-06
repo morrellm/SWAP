@@ -82,7 +82,7 @@ namespace HTTP
             bool result = false;
 
             var toSend = "";
-            Console.WriteLine("" + fs.Length);
+           // Console.WriteLine("" + fs.Length);
             toSend = GetHeaders();
 
             if (ContainsHeader("Content-Length"))

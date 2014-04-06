@@ -18,7 +18,7 @@ namespace PHP_PARSER
      */
     public static class PHP_SAPI
     {
-        public static string phpLoc = "D:\\PHP\\";
+        private static string _phpLoc = "D:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
         public static Hashtable _currentQuery = null;
 
@@ -63,6 +63,12 @@ namespace PHP_PARSER
         {
             bool result = false;
 
+            if (File.Exists(configFname + "php.exe"))
+            {
+                _phpLoc = configFname;
+                result = true;
+            }
+
             return result;
         }
         
@@ -96,7 +102,7 @@ namespace PHP_PARSER
                 mfs.Close();
                 tfs.Close();
 
-                ProcessStartInfo psi = new ProcessStartInfo(phpLoc + "php.exe", "\""+Directory.GetCurrentDirectory()+"\\temp.php"+"\"");
+                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\""+Directory.GetCurrentDirectory()+"\\temp.php"+"\"");
                 
                 psi.RedirectStandardInput = true;
                 psi.RedirectStandardOutput = true;

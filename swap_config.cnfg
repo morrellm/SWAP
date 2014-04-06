@@ -27,4 +27,11 @@
 #Server's access denied page
 	AccessDenied = no_access.html
 
+#Location of PHP folder
+	PhpLoc = C:\PHP\
+
+#Uncomment if you are not using 
+#the default PHP location (C:\PHP\)
+#this should be an absolute path (ex: drive\folder\folder\PHP\).
+
 	

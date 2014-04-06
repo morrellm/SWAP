@@ -12,12 +12,18 @@ using PHP_PARSER;
 
 namespace SimpleHttpServer
 {
+    
+    //Singleton
     class Program : IConnectionListener
     {
         private bool _run = true;
+        public const string hr = "--------------------------------------------------------------------";
 
-        private static string _myAddr = "155.92.105.192";
-        public static string MyAddress
+        private HttpServer _server = null;
+        private static Program _uInst = null;
+
+        private string _myAddr = "155.92.105.192";
+        public string MyAddress
         {
             get
             {
@@ -29,9 +35,9 @@ namespace SimpleHttpServer
             }
         }
 
-        private static string _workingPath = Directory.GetCurrentDirectory();
-        private static string _resourcePath = "\\Resources\\";
-        public static string ResourcePath 
+        private string _workingPath = Directory.GetCurrentDirectory();
+        private string _resourcePath = "\\Resources\\";
+        public string ResourcePath 
         {
             get
             {
@@ -51,8 +57,8 @@ namespace SimpleHttpServer
             }
         }
         //default 404 page file name
-        private static string _page404Fname = "404_page.html";
-        public static string Page404
+        private string _page404Fname = "404_page.html";
+        public string Page404
         {
             get
             {
@@ -65,8 +71,8 @@ namespace SimpleHttpServer
             }
         }
         //default page (index.html)
-        private static string _homePage = "home_page.html";
-        public static string HomePage
+        private string _homePage = "home_page.html";
+        public string HomePage
         {
             get
             {
@@ -80,8 +86,8 @@ namespace SimpleHttpServer
         }
 
         //this is a token that if found in a requested resource, access will be denied
-        private static string _lockedPageToken = "LOCKED_FOLDER";
-        public static string LockedPageToken
+        private string _lockedPageToken = "LOCKED_FOLDER";
+        public string LockedPageToken
         {
             get
             {
@@ -94,8 +100,8 @@ namespace SimpleHttpServer
         }
 
         //default access denied page
-        private static string _accessDenied = "no_access.html";
-        public static string AccessDenied
+        private string _accessDenied = "no_access.html";
+        public string AccessDenied
         {
             get
             {
@@ -107,12 +113,25 @@ namespace SimpleHttpServer
                     _accessDenied = value;
             }
         }
+        
+        private string _phpLoc = "C:\\PHP\\";
+        public string PhpLoc
+        {
+            get
+            {
+                return _phpLoc;
+            }
+            set
+            {
+                _phpLoc = value;
+            }
+        }
         private int served = 0;
 
         //CONSTRUCTOR********
-        public Program()
+        private Program()
         {
-            var server = new HttpServer(this);//creates a new server for the program to use
+            _server = new HttpServer(this);//creates a new server for the program to use
             //sets up the working path, and the resource path
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
 
@@ -123,15 +142,41 @@ namespace SimpleHttpServer
 
            
             Console.WriteLine("Server resource path initialized.\nResource path = " + _resourcePath);
-            PHP_SAPI.initParser("");
+            if (!PHP_SAPI.initParser(PhpLoc))
+            {
+                Console.WriteLine("Failed to find php.exe ar location "+PhpLoc);
+                Console.WriteLine("Press enter to exit...");
+                Console.Read();
+                Environment.Exit(1);
+            }
             Console.WriteLine("Server PHP parser initialized.");
-            server.Start();
+            _server.Start();
             Console.WriteLine("Server Started.");
+
+            Thread uiThread = new Thread(() =>new SwapUI(this));
+            uiThread.Start();
+        }
+
+        public static Program instance()
+        {
+            Program ret = null;
+            if (_uInst == null)
+            {
+                _uInst = new Program();
+                ret = _uInst;
+            }
+            else
+            {
+                ret = _uInst;
+            }
+
+            return ret;
         }
 
         private void parseConfigFile(string fname)
         {
             bool fail = false;
+            Program inst = this;
 
             if (File.Exists(fname))
             {
@@ -170,18 +215,23 @@ namespace SimpleHttpServer
                         }
                             if (token.Length == 2)//must be 2 or something went wrong
                             {
-                                PropertyInfo pi = this.GetType().GetProperty(token[0]);//attempts to get the specified property
+                                PropertyInfo pi = GetType().GetProperty(token[0]);//attempts to get the specified property
                                 if (pi != null)//if the property exists it is set
                                 {
                                     try
                                     {
-                                        pi.SetValue(token[0], token[1]);
-                                        Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(token[0]));
+                                        Console.WriteLine(pi);
+                                        pi.SetValue(inst, token[1]);
+                                        Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(inst));
                                     }
                                     catch (TargetInvocationException tie)//if the data is not accepted by the setter method
                                     {
                                         Console.WriteLine("\nInvalid format on line "+ i +" "+tie.InnerException.Message+"\n");
                                         fail = true;
+                                    }
+                                    catch (TargetException te)
+                                    {
+                                        Console.WriteLine("Target Exception on line "+ i + ", Property: "+token[0] +"\n"+te.Message);
                                     }
                                     
                                 }
@@ -222,11 +272,10 @@ namespace SimpleHttpServer
 
         public static void Main(String[] args)
         {
-            new Program();
-            Console.Read();
+            instance();
         }
 
-        private static string[] ParseHttpAddr(string addr)
+        private string[] ParseHttpAddr(string addr)
         {
             int startInd = 0;
 
@@ -250,14 +299,100 @@ namespace SimpleHttpServer
         public void Notify(TcpClient connection)
         {
             served++;
-            Console.WriteLine("--------------------------------------------------");
+            Console.WriteLine(Program.hr);
             Console.WriteLine("Total connections served: " + served);
-            Console.WriteLine("IP being served: "+connection.Client.RemoteEndPoint);
-            Console.WriteLine("--------------------------------------------------");
+            Console.WriteLine("IP being served: " + connection.Client.RemoteEndPoint);
+            Console.WriteLine(Program.hr);
             Thread t = new Thread(() => new RequestHandler(ref connection));
             t.Start();
         }
 
+        public ArrayList Connection
+        {
+            get
+            {
+                return _server.Conncetions;
+            }
+        }
+
+    }
+    /*
+     ****************************
+     * CLASS START SwapUI
+     ****************************
+     */
+    class SwapUI
+    {
+        private Program _program = null;
+
+        public SwapUI(Program prg)
+        {
+            if (prg != null)
+            {
+                _program = prg;
+                Console.WriteLine(Program.hr);
+                Console.WriteLine("Welcome to SWAP v0.2");
+                Console.WriteLine(Program.hr + "\n");
+                Console.WriteLine("Use command 'lscmd' for command list.\n");
+                InputLoop();
+            }
+            else
+            {
+                Console.WriteLine("Failed to start UI!!!\nEnter to exit...");
+                Environment.Exit(1);
+            }
+        }
+
+        private void InputLoop()
+        {
+            Console.Write("\nSWAP> ");
+            string input = Console.ReadLine();
+            Console.WriteLine();//a buffer between the typed cmd and the output
+            ParseInput(input);
+
+            InputLoop();
+        }
+
+        private void ParseInput(string toParse)
+        {
+            toParse = toParse.Trim();
+            switch (toParse)
+            {
+                case "lscmd":
+                    Console.WriteLine(Program.hr);
+                    Console.WriteLine("Available Commands");
+                    Console.WriteLine(Program.hr+"\n");
+                    Console.WriteLine("lscmd   - Lists availabe server commands\n"+
+                                      "concur  - Lists current connections to the server\n"+
+                                      Program.hr + "\n" +
+                                      "Unimplemented\n" +
+                                      Program.hr + "\n\n" +
+                                      "dc      - disconnect a given IP instantly.\n"+
+                                      "susdc   - suspends and disconnects a given IP for a given time period.\n"+
+                                      "susko   - suspends a given IP for a given time period, but does not disconnect\n          them upon use of command.\n"+
+                                      "          NOTE: the suspension time doesn't start until after the IP disconnects          voluntarily.\n"+
+                                      "pban    - disconnects a given IP and permenatly bans them from the server.\n"+
+                                      "More in development...");
+                    break;
+                case "concur":
+                    //get current connnections
+                    ArrayList con = _program.Connection;
+                    Console.WriteLine("\n" + Program.hr);
+                    Console.WriteLine("Current Connections");
+                    Console.WriteLine(Program.hr + "\n");
+
+                    for (int i = 0; i < con.Count; i++)
+                    {
+                        TcpClient curCon = (TcpClient) con[i];
+                        Console.WriteLine(i + ": " + curCon.Client.RemoteEndPoint);
+                    }
+
+                        break;
+                default:
+                    Console.WriteLine("Unknown Command: "+toParse);
+                    break;
+            }
+        }
     }
  
     /*
@@ -270,7 +405,15 @@ namespace SimpleHttpServer
         private TcpListener _server;
         private bool _isRunning = false;
         private readonly IConnectionListener _toNotify;
+        private ArrayList _currentConnections = new ArrayList();//TODO implement addition and substraction of connections!!
 
+        public ArrayList Connections
+        {
+            get
+            {
+                return _currentConnections;
+            }
+        }
         public HttpServer(IConnectionListener toNotify)
         {
             _toNotify = toNotify;
@@ -291,7 +434,8 @@ namespace SimpleHttpServer
             while (_isRunning)
             {
                 var client = _server.AcceptTcpClient();
-                _toNotify.Notify(client);
+                _currentConnections.Add(client);
+                _toNotify.Notify(client);//blocks
             }
         }
 
@@ -333,6 +477,8 @@ namespace SimpleHttpServer
 
             return result;
         }
+
+        public ArrayList Conncetions { get; set; }
     }
     /*
      ****************************
@@ -370,6 +516,7 @@ namespace SimpleHttpServer
             var header = "";
             var body = "";
             HttpRequest httpRequest = null;
+            Program prg = Program.instance();
 
             var headerLength = request.IndexOf("\r\n\r\n") + "\r\n\r\n".Length;
 
@@ -385,11 +532,11 @@ namespace SimpleHttpServer
             {
                 string[] query;
                 int startQuery =resource.IndexOf("?")+1;
-                Console.WriteLine("Resource: " + resource);
+             //   Console.WriteLine("Resource: " + resource);
                 query = resource.Substring(startQuery).Split('&');
                 foreach( string va in query)
                 {
-                    Console.WriteLine("Query: "+va);
+             //       Console.WriteLine("Query: "+va);
                 }
                 //removes query and stores it to the request
                 resource = resource.Substring(0, startQuery-1);
@@ -397,19 +544,19 @@ namespace SimpleHttpServer
                 PHP_SAPI.SetQuery(httpRequest.Query);
             }
 
-            if (!resource.Contains(".") && !resource.Contains(Program.LockedPageToken))//not a file request, therefore defaults to home_page of requested directory
+            if (!resource.Contains(".") && !resource.Contains(prg.LockedPageToken))//not a file request, therefore defaults to home_page of requested directory
             {
                 if (resource.Trim()[resource.Length - 1] != '/')//added extra / if it was not included in the request
                 {
                     resource += "/";
                 }
                 //goto default home page
-                var path = resource + Program.HomePage;
+                var path = resource + prg.HomePage;
                 path = path.Replace('/', '\\');
                 path = path.Substring(1);//gets rid of extra \ at beginning of resource path
                 SendResponse(ref path, ref httpRequest);//should be home page
             }
-            else if (!resource.Contains(Program.LockedPageToken))//requested resoure is a unrestricted file
+            else if (!resource.Contains(prg.LockedPageToken))//requested resoure is a unrestricted file
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
@@ -417,7 +564,7 @@ namespace SimpleHttpServer
             }
             else//restricted file was requested
             {
-                var path = Program.AccessDenied;
+                var path = prg.AccessDenied;
                 SendResponse(ref path, ref httpRequest);
             }
         }
@@ -445,7 +592,7 @@ namespace SimpleHttpServer
                 
             }
 
-            Console.WriteLine("REQUEST OBJECT:\n---------------\n"+request);
+        //    Console.WriteLine("REQUEST OBJECT:\n---------------\n"+request);
 
             return request;
         }
@@ -453,18 +600,20 @@ namespace SimpleHttpServer
         private void SendResponse(ref string resource, ref HttpRequest request)
         {
             HttpResponse response = null;
-            Console.Write(Program.ResourcePath + resource+" | Exists = ");
-            Console.WriteLine(File.Exists(Program.ResourcePath + resource));
+            Program prg = Program.instance();
+     //       Console.Write(Program.ResourcePath + resource+" | Exists = ");
+      //      Console.WriteLine(File.Exists(Program.ResourcePath + resource));
 
-            if (File.Exists(Program.ResourcePath + resource))//200 OK
+            if (File.Exists(prg.ResourcePath + resource))//200 OK
             {
+                Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
                 response = new HttpResponse(200);
-                var fs = new FileStream(Program.ResourcePath + resource, FileMode.Open, FileAccess.Read);
+                var fs = new FileStream(prg.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
                 var fileEnding = getFileType(resource);
                 if (fileEnding.Equals("php"))
                 {
-                    var body = PHP_SAPI.Parse(Program.ResourcePath + resource, request);
+                    var body = PHP_SAPI.Parse(prg.ResourcePath + resource, request);
                     string[] rName = resource.Split('/');
                     response.SetContentType("html", rName[rName.Length - 1]);
                     response.SetHeader("Content-Length", ""+body.Length);
@@ -479,7 +628,7 @@ namespace SimpleHttpServer
                         string[] rName = resource.Split('/');
                         isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
 
-                        Console.Error.WriteLine("isText? -->" + isText);
+               //         Console.Error.WriteLine("isText? -->" + isText);
 
                         response.SetHeader("Content-Length", "" + fs.Length);
                         response.Send(ref _currentStream, ref fs);
@@ -499,9 +648,9 @@ namespace SimpleHttpServer
             {
                 response = new HttpResponse(404);
                 //checks if user specified 404 page exists
-                if (File.Exists(Program.ResourcePath + Program.Page404))
+                if (File.Exists(prg.ResourcePath + prg.Page404))
                 {
-                    FileStream fs = File.Open(Program.ResourcePath + Program.Page404, FileMode.Open, FileAccess.Read);
+                    FileStream fs = File.Open(prg.ResourcePath + prg.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
                     response.SetHeader("Content-Length", "" + fs.Length);
                     response.Send(ref _currentStream, ref fs);
@@ -532,7 +681,7 @@ namespace SimpleHttpServer
                     break;
                 }
             }
-            Console.WriteLine("File Type: "+type);
+           // Console.WriteLine("File Type: "+type);
             return type;
         }
         private char[] loadFile(FileStream fs)
