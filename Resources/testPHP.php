@@ -5,6 +5,7 @@
     <body>
         <a href="<?php echo $_SERVER['PHP_SELF']?>?subject=PHP&web=W3schools.com">Test $GET</a>
         <?php
+            include "testPHP2.php";
             $color = "red";
             
             function myFun(){

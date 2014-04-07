@@ -19,8 +19,20 @@ namespace SimpleHttpServer
         private bool _run = true;
         public const string hr = "--------------------------------------------------------------------";
 
-        private HttpServer _server = null;
         private static Program _uInst = null;
+
+        private ArrayList _currentConnections = new ArrayList();
+        public ArrayList CurrentConnections
+        {
+            get
+            {
+                return _currentConnections;
+            }
+            set
+            {
+                _currentConnections = value;
+            }
+        }
 
         private string _myAddr = "155.92.105.192";
         public string MyAddress
@@ -131,7 +143,8 @@ namespace SimpleHttpServer
         //CONSTRUCTOR********
         private Program()
         {
-            _server = new HttpServer(this);//creates a new server for the program to use
+            _uInst = this;
+            var server = new HttpServer(this);//creates a new server for the program to use
             //sets up the working path, and the resource path
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
 
@@ -150,7 +163,7 @@ namespace SimpleHttpServer
                 Environment.Exit(1);
             }
             Console.WriteLine("Server PHP parser initialized.");
-            _server.Start();
+            server.Start();
             Console.WriteLine("Server Started.");
 
             Thread uiThread = new Thread(() =>new SwapUI(this));
@@ -220,7 +233,6 @@ namespace SimpleHttpServer
                                 {
                                     try
                                     {
-                                        Console.WriteLine(pi);
                                         pi.SetValue(inst, token[1]);
                                         Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(inst));
                                     }
@@ -299,20 +311,9 @@ namespace SimpleHttpServer
         public void Notify(TcpClient connection)
         {
             served++;
-            Console.WriteLine(Program.hr);
-            Console.WriteLine("Total connections served: " + served);
-            Console.WriteLine("IP being served: " + connection.Client.RemoteEndPoint);
-            Console.WriteLine(Program.hr);
+            _currentConnections.Add(connection);
             Thread t = new Thread(() => new RequestHandler(ref connection));
             t.Start();
-        }
-
-        public ArrayList Connection
-        {
-            get
-            {
-                return _server.Conncetions;
-            }
         }
 
     }
@@ -376,15 +377,34 @@ namespace SimpleHttpServer
                     break;
                 case "concur":
                     //get current connnections
-                    ArrayList con = _program.Connection;
+                    ArrayList con = _program.CurrentConnections;
                     Console.WriteLine("\n" + Program.hr);
-                    Console.WriteLine("Current Connections");
+                    Console.WriteLine("Current Connections @" + DateTime.Now);
                     Console.WriteLine(Program.hr + "\n");
 
                     for (int i = 0; i < con.Count; i++)
                     {
                         TcpClient curCon = (TcpClient) con[i];
-                        Console.WriteLine(i + ": " + curCon.Client.RemoteEndPoint);
+                        
+                        try
+                        {
+                            Console.WriteLine((i+1) + ": " + curCon.Client.RemoteEndPoint);
+                        }
+                        catch (ObjectDisposedException ode)
+                        {
+                            //if the connection has been disposed of it is removed from the list
+                            _program.CurrentConnections.RemoveAt(i);
+                            i--;
+                        }
+                       
+                    }
+                    if (con.Count == 0)
+                    {
+                        Console.WriteLine("No current connections");
+                    }
+                    else
+                    {
+                        Console.WriteLine(con.Count + " current connections");
                     }
 
                         break;
@@ -405,7 +425,7 @@ namespace SimpleHttpServer
         private TcpListener _server;
         private bool _isRunning = false;
         private readonly IConnectionListener _toNotify;
-        private ArrayList _currentConnections = new ArrayList();//TODO implement addition and substraction of connections!!
+        private ArrayList _currentConnections;
 
         public ArrayList Connections
         {
@@ -417,6 +437,7 @@ namespace SimpleHttpServer
         public HttpServer(IConnectionListener toNotify)
         {
             _toNotify = toNotify;
+            _currentConnections = new ArrayList(1);
             InitConnection();
         }
 
@@ -433,9 +454,9 @@ namespace SimpleHttpServer
         {
             while (_isRunning)
             {
-                var client = _server.AcceptTcpClient();
+                TcpClient client = _server.AcceptTcpClient();
                 _currentConnections.Add(client);
-                _toNotify.Notify(client);//blocks
+                _toNotify.Notify(client);
             }
         }
 
@@ -477,8 +498,6 @@ namespace SimpleHttpServer
 
             return result;
         }
-
-        public ArrayList Conncetions { get; set; }
     }
     /*
      ****************************
@@ -487,6 +506,7 @@ namespace SimpleHttpServer
      */
     class RequestHandler
     {
+        private TcpClient _currentConnection = null;
         private Stream _currentStream = null;
 
         /// <summary>
@@ -495,6 +515,7 @@ namespace SimpleHttpServer
         /// <param name="client">A TcpClient (pressumably with an HTTP request) to handle</param>
         public RequestHandler(ref TcpClient client)
         {
+            _currentConnection = client;
             _currentStream = client.GetStream();
             HandleRequest();
         }
@@ -606,7 +627,7 @@ namespace SimpleHttpServer
 
             if (File.Exists(prg.ResourcePath + resource))//200 OK
             {
-                Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
+               // Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
                 response = new HttpResponse(200);
                 var fs = new FileStream(prg.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
@@ -650,12 +671,21 @@ namespace SimpleHttpServer
                 //checks if user specified 404 page exists
                 if (File.Exists(prg.ResourcePath + prg.Page404))
                 {
+                    
                     FileStream fs = File.Open(prg.ResourcePath + prg.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
                     response.SetHeader("Content-Length", "" + fs.Length);
                     response.Send(ref _currentStream, ref fs);
-                    fs.Close(); 
+                    fs.Close();
                 }
+                else
+                {
+                    string page = "<html><body><h1>404 file not found:</h1> <p>" + resource + "</p></body></html>";
+                    response.SetContentType("html", prg.Page404);
+                    response.SetHeader("Content-Length", ""+page.Length);
+                    response.Send(ref _currentStream, ref page);
+                }
+                
                    
             }
         }

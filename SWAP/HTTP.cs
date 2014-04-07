@@ -103,7 +103,7 @@ namespace HTTP
             bool result = false;
 
             var headers = "";
-            Console.WriteLine("" + body.Length);
+
             headers = GetHeaders();
 
             if (ContainsHeader("Content-Length"))
@@ -131,15 +131,7 @@ namespace HTTP
             }
             catch (IOException ioe)
             {
-                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
-                                        "!  An IOException occured while trying to send a response!        ! \n" +
-                                        "!  Causes:                                                        ! \n" +
-                                        "!  1) The client voulntarily closed the output stream             ! \n" +
-                                        "!  2) This machine has lost connection to the Internet            ! \n" +
-                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
-                                        "!     closed the output stream                                    ! \n" +
-                                        "!-----------------------------------------------------------------!");
-                
+               //lost connect to user, or internet.               
             }
             fs.Close();
 
@@ -208,15 +200,7 @@ namespace HTTP
             }
             catch (IOException ioe)
             {
-                Console.Error.WriteLine(ioe.ToString());
-                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
-                                        "!  An IOException occured while trying to send a response!        ! \n" +
-                                        "!  Causes:                                                        ! \n" +
-                                        "!  1) The client voulntarily closed the output stream             ! \n" +
-                                        "!  2) This machine has lost connection to the Internet            ! \n" +
-                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
-                                        "!     closed the output stream                                    ! \n" +
-                                        "!-----------------------------------------------------------------!");
+                //lost connect to user, or internet.  
             }
 
             return result;
@@ -241,14 +225,7 @@ namespace HTTP
             }
             catch (IOException ioe)
             {
-                Console.Error.WriteLine("!----------------------Non-Fatal Exception------------------------! \n" +
-                                        "!  An IOException occured while trying to send a response!        ! \n" +
-                                        "!  Causes:                                                        ! \n" +
-                                        "!  1) The client voulntarily closed the output stream             ! \n" +
-                                        "!  2) This machine has lost connection to the Internet            ! \n" +
-                                        "!  3) The client lost connection to the server and invoulntarily  ! \n" +
-                                        "!     closed the output stream                                    ! \n" +
-                                        "!-----------------------------------------------------------------!");
+                //lost connect to user, or internet.  
             }
 
             return result;
@@ -306,11 +283,6 @@ namespace HTTP
             else if (fileEnding.Equals("xml") || fileEnding.Equals("css"))
             {
                 value = "text/" + fileEnding;
-            }
-            else if (fileEnding.Equals("php"))
-            {
-                value = "text/html";
-                //TODO php parsing goes here
             }
             else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
             {

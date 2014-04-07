@@ -21,6 +21,7 @@ namespace PHP_PARSER
         private static string _phpLoc = "D:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
         public static Hashtable _currentQuery = null;
+        private static int _currentPrependLength = 0;
 
        /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
                                                    "$_SERVER['GATEWAY_INTERFACE']", 	//Returns the version of the Common Gateway Interface (CGI) the server is using
@@ -73,7 +74,7 @@ namespace PHP_PARSER
         }
         
 
-        public static String Parse(string pathname, HttpRequest request)//THIS METHOD DOESNT ACCOUNT FOR INCLUDED FILES AND WILL NOT PROPERLY PARSER PHP FILES WITH INCLUSIONS!!!
+        public static String Parse(string pathname, HttpRequest request)
         {
             
             var body = "";
@@ -81,8 +82,9 @@ namespace PHP_PARSER
             {
                 //200 have script, will parse
                 string prepend = setSuperGlobals(request);
+                string scriptPath = GetPathName(pathname);
 
-                FileStream tfs = File.Create(Directory.GetCurrentDirectory()+"\\temp.php");
+                FileStream tfs = File.Create(scriptPath+"temp.php");
                 FileStream mfs = File.OpenRead(pathname);
                 var buffer = new byte[prepend.Length + mfs.Length];
                 String output = prepend;
@@ -102,7 +104,7 @@ namespace PHP_PARSER
                 mfs.Close();
                 tfs.Close();
 
-                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\""+Directory.GetCurrentDirectory()+"\\temp.php"+"\"");
+                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\"" + scriptPath + "temp.php"+"\"");
                 
                 psi.RedirectStandardInput = true;
                 psi.RedirectStandardOutput = true;
@@ -118,9 +120,8 @@ namespace PHP_PARSER
 
                 body = sr.ReadToEnd();
 
-                File.Delete(Directory.GetCurrentDirectory() + "\\temp.php");
+                File.Delete(scriptPath + "temp.php");
                 parser.Close();
-                Console.WriteLine("Parsed PHP in file "+pathname);
             }
             else
             {
@@ -170,6 +171,8 @@ namespace PHP_PARSER
 
             phpPrepend += "?>\n";
 
+            _currentPrependLength = phpPrepend.Length;
+
             return phpPrepend;
         }
 
@@ -181,6 +184,20 @@ namespace PHP_PARSER
             {
                 res = res.Substring(0, res.IndexOf("?"));
             }
+
+            return res;
+        }
+
+        private static string GetPathName(string res)
+        {
+            string[] splt = res.Split('\\');
+            string ret = "";
+
+            for (int i = 0; i < splt.Length-2; i++)//disincludes the last section(filename), to get the folder of the resource
+            {
+                ret += splt[i] + "\\";
+            }
+            Console.WriteLine(ret);
 
             return res;
         }
