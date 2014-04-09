@@ -623,7 +623,7 @@ namespace HTTP
         /// <returns>the value of the specifed header or null(if the header isn't in this HttpResponse</returns>
         public String GetValue(string header)
         {
-            String value = null;
+            String value = "";
 
             if (headers.Contains(header))
             {
@@ -632,7 +632,7 @@ namespace HTTP
             return value;
         }
 
-        private string GetQuery()
+        public string GetQueryString()
         {
             var query = "";
 
@@ -663,11 +663,11 @@ namespace HTTP
 
             var mod = (String)headers[MethodKey];
             int queryIns = mod.LastIndexOf(" ");
-            var query = GetQuery();
+            var query = GetQueryString();
 
             if (query != null && !query.Equals("")) 
             {
-                mod = mod.Insert(queryIns, "?" + GetQuery() + " ");
+                mod = mod.Insert(queryIns, "?" + GetQueryString() + " ");
             }            
 
             str += mod+"\r\n";

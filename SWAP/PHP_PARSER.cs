@@ -20,8 +20,7 @@ namespace PHP_PARSER
     {
         private static string _phpLoc = "D:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
-        public static Hashtable _currentQuery = null;
-        private static int _currentPrependLength = 0;
+        private static int _tempNum = 0;
 
        /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
                                                    "$_SERVER['GATEWAY_INTERFACE']", 	//Returns the version of the Common Gateway Interface (CGI) the server is using
@@ -84,7 +83,10 @@ namespace PHP_PARSER
                 string prepend = setSuperGlobals(request);
                 string scriptPath = GetPathName(pathname);
 
-                FileStream tfs = File.Create(scriptPath+"temp.php");
+                int curNum = _tempNum;//sets the current temp
+                FileStream tfs = File.Create(scriptPath+"temp" + curNum + ".php");//creates a temp file to be augmented with the server variables
+                _tempNum++;
+
                 FileStream mfs = File.OpenRead(pathname);
                 var buffer = new byte[prepend.Length + mfs.Length];
                 String output = prepend;
@@ -104,7 +106,7 @@ namespace PHP_PARSER
                 mfs.Close();
                 tfs.Close();
 
-                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\"" + scriptPath + "temp.php"+"\"");
+                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\"" + scriptPath + "temp" + curNum + ".php" + "\"");
                 
                 psi.RedirectStandardInput = true;
                 psi.RedirectStandardOutput = true;
@@ -120,7 +122,8 @@ namespace PHP_PARSER
 
                 body = sr.ReadToEnd();
 
-                File.Delete(scriptPath + "temp.php");
+                File.Delete(scriptPath + "temp" + curNum + ".php");
+                _tempNum--;
                 parser.Close();
             }
             else
@@ -140,27 +143,30 @@ namespace PHP_PARSER
             String phpPrepend = "<?php\n";
 
             //SERVER_ADDR, SERVER_NAME, SERVER_SOFTWARE-X, SERVER_PROTOCOL-X
-            phpPrepend += "$_SERVER['SERVER_SOFTWARE'] = \"Simple Webserver with PHP v0.1\";\n";
+            phpPrepend += "$_SERVER['SERVER_NAME'] = \"" + System.Environment.MachineName + "\";\n";
+            phpPrepend += "$_SERVER['SERVER_SOFTWARE'] = \"Simple Webserver and PHP v0.2\";\n";
             phpPrepend += "$_SERVER['SERVER_ADDR'] = \"" + request.GetValue("Host") + "\";\n";//SERVER_ADDR
             phpPrepend += "$_SERVER['PHP_SELF'] = \"" + GetScriptName(request.Resource) + "\";\n";
             phpPrepend += "$_SERVER['SCRIPT_NAME'] = \""+GetScriptName(request.Resource)+"\";\n";
             phpPrepend += "$_SERVER['SERVER_PROTOCOL'] = \"HTTP/1.1\";\n";
             phpPrepend += "$_SERVER['GATEWAY_INTERFACE'] = \""+GATE_INTER+"\";\n";
-            phpPrepend += "$_SERVER['SERVER_NAME'] = \"" + request.GetValue("Host") + "\";\n";
             phpPrepend += "$_SERVER['HTTP_HOST'] = \""+request.GetValue("Host") +"\";\n";
             phpPrepend += "$_SERVER['HTTP_ACCEPT'] = \""+request.GetValue("Accept")+"\";\n";
+            phpPrepend += "$_SERVER['HTTP_USER_AGENT'] = \"" + request.GetValue("User-Agent") + "\";\n";
+            phpPrepend += "$_SERVER['HTTP_REFERER'] = \"" + request.GetValue("Referer") + "\";\n";
+            phpPrepend += "$_SERVER['QUERY_STRING'] = \"" + request.GetQueryString() + "\";\n";
             var method = request.RequestMethod;
             //REQUEST_METHOD, REQUEST_TIME
 
             //QUERY_STRING-X
             //sets queries if used
-            if (_currentQuery != null)
+            Hashtable query = request.Query;
+            if (query != null)
             {
-                foreach (var key in _currentQuery.Keys)
+                foreach (var key in query.Keys)
                 {
-                    phpPrepend += "$_GET['" + key + "'] = \"" + _currentQuery[key] + "\";\n";
+                    phpPrepend += "$_GET['" + key + "'] = \"" + query[key] + "\";\n";
                 }
-                _currentQuery = null;
             }
             //HTTP_ACCEPT, HTTP_ACCEPT_CHARSET
             //HTTP_HOST, HTTP_REFERER, HTTPS
@@ -171,11 +177,8 @@ namespace PHP_PARSER
 
             phpPrepend += "?>\n";
 
-            _currentPrependLength = phpPrepend.Length;
-
             return phpPrepend;
         }
-
         private static string GetScriptName(string res)
         {
             string ret = res;
@@ -193,19 +196,13 @@ namespace PHP_PARSER
             string[] splt = res.Split('\\');
             string ret = "";
 
-            for (int i = 0; i < splt.Length-2; i++)//disincludes the last section(filename), to get the folder of the resource
+            for (int i = 0; i < splt.Length-1; i++)//disincludes the last section(filename), to get the folder of the resource
             {
                 ret += splt[i] + "\\";
             }
-            Console.WriteLine(ret);
 
-            return res;
+            return ret;
         }
 
-
-        public static void SetQuery(Hashtable query)
-        {
-            _currentQuery = query;
-        }
     }
 }

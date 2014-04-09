@@ -365,6 +365,7 @@ namespace SimpleHttpServer
                     Console.WriteLine(Program.hr+"\n");
                     Console.WriteLine("lscmd   - Lists availabe server commands\n"+
                                       "concur  - Lists current connections to the server\n"+
+                                      "ls      - Lists all available resources in the server's resoure\n          location.\n" +
                                       Program.hr + "\n" +
                                       "Unimplemented\n" +
                                       Program.hr + "\n\n" +
@@ -374,6 +375,36 @@ namespace SimpleHttpServer
                                       "          NOTE: the suspension time doesn't start until after the IP disconnects          voluntarily.\n"+
                                       "pban    - disconnects a given IP and permenatly bans them from the server.\n"+
                                       "More in development...");
+                    break;
+                case "ls":
+                    Program prg = Program.instance();
+                    if (Directory.Exists(prg.ResourcePath))
+                    {
+                        string[] dir = Directory.GetDirectories(prg.ResourcePath);
+                        string[] file = Directory.GetFiles(prg.ResourcePath);
+
+                        //Directories are listed first
+                        Console.WriteLine("\n" + Program.hr);
+                        Console.WriteLine(prg.ResourcePath);
+                        Console.WriteLine(Program.hr + "\n");
+
+                        for (int i = 0; i < dir.Length; i++)
+                        {
+                            dir[i] = dir[i].Replace(prg.ResourcePath, "");
+                            Console.WriteLine("Folder - " + dir[i]);
+                        }
+                        for (int i = 0; i < file.Length; i++)
+                        {
+                            file[i] = file[i].Replace(prg.ResourcePath, "");
+                            Console.WriteLine("File - " + file[i]);
+                        }
+                        Console.WriteLine("\n");
+                    }
+                    else
+                    {
+                        //Resource path is invalid
+                        Console.WriteLine("It appears that resource path " + prg.ResourcePath + " does exist or can't be accessed.");
+                    }
                     break;
                 case "concur":
                     //get current connnections
@@ -519,6 +550,13 @@ namespace SimpleHttpServer
             _currentStream = client.GetStream();
             HandleRequest();
         }
+        /// <summary>
+        /// This is the destructor, it removes the request handler from the Programs currentConnections data structure
+        /// </summary>
+        ~RequestHandler()
+        {
+            Program.instance().CurrentConnections.Remove(_currentConnection);
+        }
 
         /// <summary>
         /// This method handles the entirity of request processing
@@ -526,7 +564,7 @@ namespace SimpleHttpServer
         private void HandleRequest()
         {
             string request = ReadRequest();//DONE
-
+            
             ProcessRequest(request);//DONE for now (2/4/2014)
 
             _currentStream.Close();//DONE
@@ -552,7 +590,7 @@ namespace SimpleHttpServer
             if (resource.Contains("?"))
             {
                 string[] query;
-                int startQuery =resource.IndexOf("?")+1;
+                int startQuery = resource.IndexOf("?")+1;
              //   Console.WriteLine("Resource: " + resource);
                 query = resource.Substring(startQuery).Split('&');
                 foreach( string va in query)
@@ -562,7 +600,6 @@ namespace SimpleHttpServer
                 //removes query and stores it to the request
                 resource = resource.Substring(0, startQuery-1);
                 httpRequest.SetQuery(query);
-                PHP_SAPI.SetQuery(httpRequest.Query);
             }
 
             if (!resource.Contains(".") && !resource.Contains(prg.LockedPageToken))//not a file request, therefore defaults to home_page of requested directory
@@ -577,16 +614,11 @@ namespace SimpleHttpServer
                 path = path.Substring(1);//gets rid of extra \ at beginning of resource path
                 SendResponse(ref path, ref httpRequest);//should be home page
             }
-            else if (!resource.Contains(prg.LockedPageToken))//requested resoure is a unrestricted file
+            else
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
                 SendResponse(ref resource, ref httpRequest);
-            }
-            else//restricted file was requested
-            {
-                var path = prg.AccessDenied;
-                SendResponse(ref path, ref httpRequest);
             }
         }
         private HttpRequest setupRequest(ref string header, ref string body)
@@ -600,8 +632,10 @@ namespace SimpleHttpServer
 
             for (int i = 1; i < lines.Length; i++)
             {
-                string[] curTokens = lines[i].Split(':');
-
+                //this ensures that if there is a ':' in the value section it doesn't affect the value
+                
+                string[] curTokens = lines[i].Split(new char[] {':'}, 2);
+               
                 try
                 {
                     request.AddHeader(curTokens[0], curTokens[1]);
@@ -625,7 +659,7 @@ namespace SimpleHttpServer
      //       Console.Write(Program.ResourcePath + resource+" | Exists = ");
       //      Console.WriteLine(File.Exists(Program.ResourcePath + resource));
 
-            if (File.Exists(prg.ResourcePath + resource))//200 OK
+            if (File.Exists(prg.ResourcePath + resource) && !resource.Contains(prg.LockedPageToken))//200 OK
             {
                // Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
                 response = new HttpResponse(200);
@@ -665,9 +699,10 @@ namespace SimpleHttpServer
                 }
                 
             }
-            else//404 File Not Found
+            else if (!resource.Contains(prg.LockedPageToken))//404 File Not Found
             {
                 response = new HttpResponse(404);
+
                 //checks if user specified 404 page exists
                 if (File.Exists(prg.ResourcePath + prg.Page404))
                 {
@@ -685,8 +720,29 @@ namespace SimpleHttpServer
                     response.SetHeader("Content-Length", ""+page.Length);
                     response.Send(ref _currentStream, ref page);
                 }
-                
-                   
+
+
+            }
+            else//403 Access Denied
+            {
+                response = new HttpResponse(403);
+                //checks if user specified 403 page exists
+                if (File.Exists(prg.ResourcePath + prg.AccessDenied))
+                {
+
+                    FileStream fs = File.Open(prg.ResourcePath + prg.AccessDenied, FileMode.Open, FileAccess.Read);
+                    response.SetHeader("Content-Type", "text/html");
+                    response.SetHeader("Content-Length", "" + fs.Length);
+                    response.Send(ref _currentStream, ref fs);
+                    fs.Close();
+                }
+                else
+                {
+                    string page = "<html><body><h1>403 Access Denied:</h1> <p>" + resource + "</p></body></html>";
+                    response.SetContentType("html", prg.AccessDenied);
+                    response.SetHeader("Content-Length", "" + page.Length);
+                    response.Send(ref _currentStream, ref page);
+                }
             }
         }
         
