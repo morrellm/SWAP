@@ -21,6 +21,21 @@ namespace SimpleHttpServer
 
         private static Program _uInst = null;
 
+        private int _threadMax = 10;
+        public int ThreadMax
+        {
+            get
+            {
+                return _threadMax;
+            }
+            set
+            {
+                if (value > 0)
+                    _threadMax = value;
+                else
+                    throw new ArgumentException("Thread max must be > 0!!");
+            }
+        }
         private ArrayList _currentConnections = new ArrayList();
         public ArrayList CurrentConnections
         {
@@ -233,7 +248,10 @@ namespace SimpleHttpServer
                                 {
                                     try
                                     {
-                                        pi.SetValue(inst, token[1]);
+                                        if (pi.GetValue(this).GetType().Equals("".GetType()))//if property type is a string
+                                            pi.SetValue(inst, token[1]);
+                                        else//if it is a number
+                                            pi.SetValue(inst, Int32.Parse(token[1]));
                                         Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(inst));
                                     }
                                     catch (TargetInvocationException tie)//if the data is not accepted by the setter method
@@ -244,6 +262,7 @@ namespace SimpleHttpServer
                                     catch (TargetException te)
                                     {
                                         Console.WriteLine("Target Exception on line "+ i + ", Property: "+token[0] +"\n"+te.Message);
+                                        fail = true;
                                     }
                                     
                                 }
@@ -269,6 +288,7 @@ namespace SimpleHttpServer
                 Console.WriteLine("\nCould not find "+ fname +", Server could not be started!!!");
                 fail = true;
             }
+
             if (fail)
             {
                 Console.WriteLine("\nFailed to parse configuration file!");
@@ -310,7 +330,24 @@ namespace SimpleHttpServer
 
         public void Notify(TcpClient connection)
         {
+            bool block = false;
             served++;
+            if (_currentConnections.Count == _threadMax)//if thread capacity is reached
+            {
+                block = true;//this request must wait to be served
+                Console.WriteLine("Thread Cap reached, blocking");
+            }
+            //TODO not working with chrome!!!
+            //this loop waits for a connection to be freed
+            while (block)//TODO add a time out. When the time out occurs the user is redirected to a page saying the server is experiencing many requests (high traffic)
+            {
+                if (_currentConnections.Count != _threadMax)
+                {
+                    block = false;
+                    Console.WriteLine("End blocking");
+                }
+            }
+
             _currentConnections.Add(connection);
             Thread t = new Thread(() => new RequestHandler(ref connection));
             t.Start();
@@ -549,13 +586,15 @@ namespace SimpleHttpServer
             _currentConnection = client;
             _currentStream = client.GetStream();
             HandleRequest();
+            Dispose();
         }
         /// <summary>
         /// This is the destructor, it removes the request handler from the Programs currentConnections data structure
         /// </summary>
-        ~RequestHandler()
+        public void Dispose()
         {
             Program.instance().CurrentConnections.Remove(_currentConnection);
+            _currentConnection.Close();
         }
 
         /// <summary>
@@ -563,11 +602,11 @@ namespace SimpleHttpServer
         /// </summary>
         private void HandleRequest()
         {
-            string request = ReadRequest();//DONE
+            string request = ReadRequest();
             
-            ProcessRequest(request);//DONE for now (2/4/2014)
+            ProcessRequest(request);
 
-            _currentStream.Close();//DONE
+            _currentStream.Close();
         }
 
         private void ProcessRequest(string request)
@@ -587,22 +626,30 @@ namespace SimpleHttpServer
 
             httpRequest = setupRequest(ref header, ref body);
 
+            //if the resource contains a query, this block handls it
             if (resource.Contains("?"))
             {
                 string[] query;
                 int startQuery = resource.IndexOf("?")+1;
+                int endQuery = resource.IndexOf("#");//accounts for fragments
+
              //   Console.WriteLine("Resource: " + resource);
-                query = resource.Substring(startQuery).Split('&');
-                foreach( string va in query)
+                if (endQuery != -1)
                 {
-             //       Console.WriteLine("Query: "+va);
+                    query = resource.Substring(startQuery, endQuery - startQuery).Split('&');
                 }
+                else
+                {
+                    query = resource.Substring(startQuery).Split('&');
+                }
+                
+             
                 //removes query and stores it to the request
                 resource = resource.Substring(0, startQuery-1);
                 httpRequest.SetQuery(query);
             }
 
-            if (!resource.Contains(".") && !resource.Contains(prg.LockedPageToken))//not a file request, therefore defaults to home_page of requested directory
+            if (!resource.Contains("."))//not a file request, therefore defaults to server's default home page of requested directory
             {
                 if (resource.Trim()[resource.Length - 1] != '/')//added extra / if it was not included in the request
                 {
@@ -614,7 +661,7 @@ namespace SimpleHttpServer
                 path = path.Substring(1);//gets rid of extra \ at beginning of resource path
                 SendResponse(ref path, ref httpRequest);//should be home page
             }
-            else
+            else//file request
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
@@ -633,7 +680,6 @@ namespace SimpleHttpServer
             for (int i = 1; i < lines.Length; i++)
             {
                 //this ensures that if there is a ':' in the value section it doesn't affect the value
-                
                 string[] curTokens = lines[i].Split(new char[] {':'}, 2);
                
                 try
@@ -659,47 +705,83 @@ namespace SimpleHttpServer
      //       Console.Write(Program.ResourcePath + resource+" | Exists = ");
       //      Console.WriteLine(File.Exists(Program.ResourcePath + resource));
 
-            if (File.Exists(prg.ResourcePath + resource) && !resource.Contains(prg.LockedPageToken))//200 OK
+            if (File.Exists(prg.ResourcePath + resource))//File exists
             {
-               // Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
-                response = new HttpResponse(200);
-                var fs = new FileStream(prg.ResourcePath + resource, FileMode.Open, FileAccess.Read);
-
-                var fileEnding = getFileType(resource);
-                if (fileEnding.Equals("php"))
+                if (!resource.Contains(prg.LockedPageToken))//200 OK
                 {
-                    var body = PHP_SAPI.Parse(prg.ResourcePath + resource, request);
-                    string[] rName = resource.Split('/');
-                    response.SetContentType("html", rName[rName.Length - 1]);
-                    response.SetHeader("Content-Length", ""+body.Length);
-                    response.Send(ref _currentStream, ref body);
-                }
-                else
-                {
-                    bool isText = true;
+                    bool streamed = false;
+                    // Console.WriteLine("-------------------" + prg.ResourcePath + resource + "-----------------------");
+                    response = new HttpResponse(200);
+                    
+                    var fs = new FileStream(prg.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
-                    if (fs.Length <= 30000000)//if the file is less than 30MB send normally
+                    if (request.GetValue("Range") != null)
                     {
+                        response.SetHeader("Accept-Ranges", "bytes");
+                        streamed = true;
+                    }
+
+                    var fileEnding = getFileType(resource);
+                    if (fileEnding.Equals("php"))
+                    {
+                        var body = PHP_SAPI.Parse(prg.ResourcePath + resource, request);
                         string[] rName = resource.Split('/');
-                        isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
+                        response.SetContentType("html", rName[rName.Length - 1]);
+                        response.SetHeader("Content-Length", "" + body.Length);
+                        response.Send(ref _currentStream, ref body);
+                    }
+                    else
+                    {
+                        bool isText = true;
 
-               //         Console.Error.WriteLine("isText? -->" + isText);
+                        if (fs.Length <= 30000000 && !streamed)//if the file is less than 30MB send normally
+                        {
+                            string[] rName = resource.Split('/');
+                            isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
 
+                            //         Console.Error.WriteLine("isText? -->" + isText);
+
+                            response.SetHeader("Content-Length", "" + fs.Length);
+                            if (streamed)
+                            {
+                                response.SetHeader("Content-Range", "bytes 0-"+fs.Length+"/*");
+                            }
+                            response.Send(ref _currentStream, ref fs);
+                        }
+                        else//send chunked
+                        {
+                            string[] rName = resource.Split('/');
+                            isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);
+                            response.SetHeader("Transfer-Encoding", "chunked");
+                            response.SetHeader("Content-Length", "" + fs.Length);
+                            response.SendChunked(ref _currentStream, ref fs);
+                        }
+                    }
+                }
+                else//403 Forbidden
+                {
+                    response = new HttpResponse(403);
+                    //checks if user specified 403 page exists
+                    if (File.Exists(prg.ResourcePath + prg.AccessDenied))
+                    {
+
+                        FileStream fs = File.Open(prg.ResourcePath + prg.AccessDenied, FileMode.Open, FileAccess.Read);
+                        response.SetHeader("Content-Type", "text/html");
                         response.SetHeader("Content-Length", "" + fs.Length);
                         response.Send(ref _currentStream, ref fs);
+                        fs.Close();
                     }
-                    else//send chunked
+                    else
                     {
-                        string[] rName = resource.Split('/');
-                        isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);
-                        response.SetHeader("Transfer-Encoding", "chunked");
-                        response.SetHeader("Content-Length", "" + fs.Length);
-                        response.SendChunked(ref _currentStream, ref fs);
+                        string page = "<html><body><h1>403 Access Denied:</h1> <p>" + resource + "</p></body></html>";
+                        response.SetContentType("html", prg.AccessDenied);
+                        response.SetHeader("Content-Length", "" + page.Length);
+                        response.Send(ref _currentStream, ref page);
                     }
                 }
                 
             }
-            else if (!resource.Contains(prg.LockedPageToken))//404 File Not Found
+            else//404 File Not Found
             {
                 response = new HttpResponse(404);
 
@@ -722,27 +804,6 @@ namespace SimpleHttpServer
                 }
 
 
-            }
-            else//403 Access Denied
-            {
-                response = new HttpResponse(403);
-                //checks if user specified 403 page exists
-                if (File.Exists(prg.ResourcePath + prg.AccessDenied))
-                {
-
-                    FileStream fs = File.Open(prg.ResourcePath + prg.AccessDenied, FileMode.Open, FileAccess.Read);
-                    response.SetHeader("Content-Type", "text/html");
-                    response.SetHeader("Content-Length", "" + fs.Length);
-                    response.Send(ref _currentStream, ref fs);
-                    fs.Close();
-                }
-                else
-                {
-                    string page = "<html><body><h1>403 Access Denied:</h1> <p>" + resource + "</p></body></html>";
-                    response.SetContentType("html", prg.AccessDenied);
-                    response.SetHeader("Content-Length", "" + page.Length);
-                    response.Send(ref _currentStream, ref page);
-                }
             }
         }
         
@@ -769,19 +830,6 @@ namespace SimpleHttpServer
             }
            // Console.WriteLine("File Type: "+type);
             return type;
-        }
-        private char[] loadFile(FileStream fs)
-        {
-            char[] file = new char[fs.Length];
-            byte[] buffer = new byte[1];
-            for (int i = 0; i < file.Length; i++)
-            {
-                fs.Read(buffer, 0, 1);
-                file[i] = (char)buffer[0];
-            }
-                
-
-            return file;
         }
 
         private static string GetResource(string header)

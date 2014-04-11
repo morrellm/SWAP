@@ -49,6 +49,9 @@ namespace HTTP
                 case 200:
                     headerStart += "200 OK";
                     break;
+                case 206:
+                    headerStart += "206 Partial Content";
+                    break;
                 case 301:
                     headerStart += "301 Moved Permanently";
                     break;
@@ -171,7 +174,7 @@ namespace HTTP
                 bool tempStop3 = !SendString(ref strm, ref chunk);
                 bool tempStop = !SendBytes(ref strm, ref chunkBuffer);
                 bool tempStop2 = !SendString(ref strm, ref CRLF);
-                if (tempStop && tempStop2 && tempStop3)
+                if (tempStop || tempStop2 || tempStop3)
                 {
                     stop = true;
                     fs.Close();
@@ -278,11 +281,11 @@ namespace HTTP
             //if text type convert to string
             if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("stm"))
             {
-                value = "text/html";
+                value = "text/html; charset=utf-8";
             }
             else if (fileEnding.Equals("xml") || fileEnding.Equals("css"))
             {
-                value = "text/" + fileEnding;
+                value = "text/" + fileEnding + "; charset=utf-8";
             }
             else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
             {
@@ -310,6 +313,10 @@ namespace HTTP
                 value = "video/mpeg";
                 isText = false;
             }
+            else if (fileEnding.Equals("mp4")){
+                value = "video/mp4";
+                isText = false;
+            }
             else if (fileEnding.Equals("qt"))
             {
                 value = "video/quicktime";
@@ -317,7 +324,7 @@ namespace HTTP
             }
             else if (fileEnding.Equals("rtx"))
             {
-                value = "text/richtext";
+                value = "text/richtext; charset=utf-8";
             }
             else if (fileEnding.Equals("rtf"))
             {
@@ -356,7 +363,12 @@ namespace HTTP
             }
             else if (fileEnding.Equals("txt"))
             {
-                value = "text/plain";
+                value = "text/plain; charset=utf-8";
+            }
+            else if (fileEnding.Equals("zip"))
+            {
+                value = "application/zip";
+                isText = false;
             }
             else
             {
@@ -488,7 +500,7 @@ namespace HTTP
         private const string MethodKey = "method";
         private Method _requestMethod = Method.Null;
         private String _resource = "/";
-        
+
         public String Resource
         {
             get
@@ -519,6 +531,31 @@ namespace HTTP
         }
 
         public enum Method { Get, Head, Post, Options, Null };
+
+        public String MethodToString()
+        {
+            Method meth = _requestMethod;
+            String str = null;
+            switch (meth)
+            {
+                case Method.Get:
+                    str = "GET";
+                    break;
+                case Method.Head:
+                    str = "HEAD";
+                    break;
+                case Method.Post:
+                    str = "POST";
+                    break;
+                case Method.Options:
+                    str = "OPTIONS";
+                    break;
+                case Method.Null:
+                default:
+                    break;
+            }
+            return str;
+        }
 
 
         public HttpRequest(Method meth, string resource)
@@ -623,7 +660,7 @@ namespace HTTP
         /// <returns>the value of the specifed header or null(if the header isn't in this HttpResponse</returns>
         public String GetValue(string header)
         {
-            String value = "";
+            String value = null;
 
             if (headers.Contains(header))
             {

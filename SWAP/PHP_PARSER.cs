@@ -6,20 +6,22 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Diagnostics;
 using System.Collections;
+using System.Timers;
 using HTTP;
 
 namespace PHP_PARSER
 {
     /*
-     * Aim is to support PHP 5.1.0
+     * Aim is to support PHP 5.5.4
      * The way it works:
      * 1) the parser is setup using a configuration file of a known location
      * 2) when an outside program wants to use the php parser it passes in a
      */
     public static class PHP_SAPI
     {
-        private static string _phpLoc = "D:\\PHP\\";
+        private static string _phpLoc = "C:\\PHP\\";
         public static string GATE_INTER = "CGI/1.1";
+        private static Process _parser = null;
         private static int _tempNum = 0;
 
        /* public const string[] knownSuperGlobal = { "$_SERVER['PHP_SELF']",              //Returns the location of the executing script
@@ -65,7 +67,19 @@ namespace PHP_PARSER
 
             if (File.Exists(configFname + "php.exe"))
             {
+                //sets php location
                 _phpLoc = configFname;
+                //start parser process
+                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe");
+
+                psi.RedirectStandardInput = true;
+                psi.RedirectStandardOutput = true;
+                psi.UseShellExecute = false;
+                _parser = new Process();
+
+                _parser.StartInfo = psi;
+
+                _parser.Start();
                 result = true;
             }
 
@@ -84,47 +98,83 @@ namespace PHP_PARSER
                 string scriptPath = GetPathName(pathname);
 
                 int curNum = _tempNum;//sets the current temp
-                FileStream tfs = File.Create(scriptPath+"temp" + curNum + ".php");//creates a temp file to be augmented with the server variables
-                _tempNum++;
-
-                FileStream mfs = File.OpenRead(pathname);
-                var buffer = new byte[prepend.Length + mfs.Length];
-                String output = prepend;
-
-                for (int i = 0; i < prepend.Length; i++)
+                FileStream tfs = null;
+                FileStream mfs = null;
+                try
                 {
-                    buffer[i] = (byte)prepend[i];
+                    tfs = File.Create(scriptPath + "temp" + curNum + ".php");//creates a temp file to be augmented with the server variables
+                    _tempNum++;
+
+                    mfs = File.OpenRead(pathname);
+                    var buffer = new byte[prepend.Length + mfs.Length];
+                    String output = prepend;
+
+                    for (int i = 0; i < prepend.Length; i++)
+                    {
+                        buffer[i] = (byte)prepend[i];
+                    }
+
+
+                    var startOffset = prepend.Length;
+                    mfs.Read(buffer, startOffset, (int)mfs.Length);
+
+
+                    tfs.Write(buffer, 0, buffer.Length);
+
+                    mfs.Close();
+                    tfs.Close();
+
+                    _parser.StartInfo.Arguments = "\"" + scriptPath + "temp" + curNum + ".php\"";//sets argument
+                    _parser.Start();//uses specified args
+
+                    StreamReader sr = _parser.StandardOutput;
+                    int timeout = 1000;
+                    bool stop = false;
+                    Timer timer = new Timer(timeout);
+                    timer.Elapsed += delegate(Object sender, ElapsedEventArgs e)
+                                     {
+                                         stop = true;
+                                         timer.Dispose();
+                                     };
+                    try
+                    {
+                        timer.Start();
+                        while (!sr.EndOfStream && !stop)
+                        {
+                            body += sr.ReadLine();
+                        }
+
+                    }
+                    catch (OutOfMemoryException oome)
+                    {
+                        //this means there was some error in the php and to write the body
+                    }
+                    finally
+                    {
+                        timer.Stop();
+                    }
+
+
+                    File.Delete(scriptPath + "temp" + curNum + ".php");
+                    _tempNum--;
                 }
-
-
-                var startOffset = prepend.Length;
-                mfs.Read(buffer, startOffset, (int)mfs.Length);
-                
-                
-                tfs.Write(buffer, 0, buffer.Length);
-
-                mfs.Close();
-                tfs.Close();
-
-                ProcessStartInfo psi = new ProcessStartInfo(_phpLoc + "php.exe", "\"" + scriptPath + "temp" + curNum + ".php" + "\"");
-                
-                psi.RedirectStandardInput = true;
-                psi.RedirectStandardOutput = true;
-                psi.UseShellExecute = false;
-                Process parser = new Process();
-
-                parser.StartInfo = psi;
-
-                parser.Start();
-                            
-                
-                StreamReader sr = parser.StandardOutput;
-
-                body = sr.ReadToEnd();
-
-                File.Delete(scriptPath + "temp" + curNum + ".php");
-                _tempNum--;
-                parser.Close();
+                catch (IOException ioe)
+                {
+                    //this occurs if the File is being accessed by another process.
+                    //if this is the case, the parser does nothing.
+                }
+                finally
+                {
+                    //closes any filestreams that were not closed due to a thrown exception
+                    if (tfs != null)
+                    {
+                        tfs.Close();
+                    }
+                    if (mfs != null)
+                    {
+                        mfs.Close();
+                    }
+                }
             }
             else
             {
@@ -155,6 +205,7 @@ namespace PHP_PARSER
             phpPrepend += "$_SERVER['HTTP_USER_AGENT'] = \"" + request.GetValue("User-Agent") + "\";\n";
             phpPrepend += "$_SERVER['HTTP_REFERER'] = \"" + request.GetValue("Referer") + "\";\n";
             phpPrepend += "$_SERVER['QUERY_STRING'] = \"" + request.GetQueryString() + "\";\n";
+            phpPrepend += "$_SERVER['REQUEST_METHOD'] = \"" + request.MethodToString() + "\";\n";
             var method = request.RequestMethod;
             //REQUEST_METHOD, REQUEST_TIME
 
