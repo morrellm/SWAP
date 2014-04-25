@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.IO;
 using System.Collections;
+using System.Net.Sockets;
 
 
 namespace HTTP
@@ -88,11 +89,6 @@ namespace HTTP
            // Console.WriteLine("" + fs.Length);
             toSend = GetHeaders();
 
-            if (ContainsHeader("Content-Length"))
-            {
-                DeleteHeader("Transfer-Encoding");
-            }
-
             //sends response
             SendString(ref strm, ref toSend);
             SendFile(ref strm, ref fs);
@@ -105,14 +101,7 @@ namespace HTTP
         {
             bool result = false;
 
-            var headers = "";
-
-            headers = GetHeaders();
-
-            if (ContainsHeader("Content-Length"))
-            {
-                DeleteHeader("Transfer-Encoding");
-            }
+            var headers = GetHeaders();
 
             //sends response
             SendString(ref strm, ref headers);
@@ -273,10 +262,9 @@ namespace HTTP
         /// </summary>
         /// <param name="fileEnding"></param>
         /// <param name="response"></param>
-        public bool SetContentType(string fileEnding, string fname)
+        public string SetContentType(string fileEnding, string fname)
         {
             var value = "";
-            var isText = true;
 
             //if text type convert to string
             if (fileEnding.Equals("html") || fileEnding.Equals("htm") || fileEnding.Equals("stm"))
@@ -290,37 +278,37 @@ namespace HTTP
             else if (fileEnding.Equals("jpg") || fileEnding.Equals("jpeg") || fileEnding.Equals("jpe"))
             {
                 value = "image/jpeg";
-                isText = false;
+
             }
             else if (fileEnding.Equals("gif") || fileEnding.Equals("bmp"))
             {
                 value = "image/" + fileEnding;
-                isText = false;
+
             }
             else if (fileEnding.Equals("ico"))
             {
                 value = "image/x-icon";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("svg"))
             {
                 value = "image/svg+xml";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("mp2") || fileEnding.Equals("mpa") || fileEnding.Equals("mpe") ||
                      fileEnding.Equals("mpeg") || fileEnding.Equals("mpg") || fileEnding.Equals("mpv2"))
             {
                 value = "video/mpeg";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("mp4")){
                 value = "video/mp4";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("qt"))
             {
                 value = "video/quicktime";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("rtx"))
             {
@@ -329,37 +317,37 @@ namespace HTTP
             else if (fileEnding.Equals("rtf"))
             {
                 value = "application/rtf";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("mp3"))
             {
                 value = "audio/mpeg";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("snd"))
             {
                 value = "audio/basic";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("pdf"))
             {
                 value = "application/pdf";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("pps") || fileEnding.Equals("ppt"))
             {
                 value = "application/vnd.ms-powerpoint";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("swf"))
             {
                 value = "application/x-shockwave-flash";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("js"))
             {
                 value = "application/x-javascript";
-                isText = false;
+                
             }
             else if (fileEnding.Equals("txt"))
             {
@@ -368,18 +356,18 @@ namespace HTTP
             else if (fileEnding.Equals("zip"))
             {
                 value = "application/zip";
-                isText = false;
+                
             }
             else
             {
                 value = "application/octet-stream";
                 SetHeader("content-disposition", "attachment; filename=" + fname);
-                isText = false;
+                
             }
 
             this.SetHeader("Content-Type", value);
 
-            return isText;
+            return value;
         }
 
         public bool DeleteHeader(string header)
@@ -442,6 +430,21 @@ namespace HTTP
 
             return value;
         }
+        public string GetStatusHeader()
+        {
+            string ret = GetHeader(STATUS_LINE);
+            ret = ret.Substring(ret.IndexOf(':') + 1).Trim();
+            return ret;
+        }
+        public string GetHeader(string header)
+        {
+            string ret = null;
+            if (ContainsHeader(header))
+            {
+                ret += header + ": " + headers[header];
+            }
+            return ret;
+        }
 
         public string GetHeaders()
         {
@@ -495,17 +498,22 @@ namespace HTTP
 
     public class HttpRequest
     {
-        //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpRequest object
         private Hashtable headers = new Hashtable();
         private const string MethodKey = "method";
-        private Method _requestMethod = Method.Null;
+        private Method _requestMethod = Method.NULL;
         private String _resource = "/";
+        private Stream _stream = null;
 
         public String Resource
         {
             get
             {
                 return _resource;
+            }
+            set
+            {
+                //add error checking
+                _resource = value;
             }
         }
         
@@ -516,6 +524,14 @@ namespace HTTP
         }
         private string _body = "";
         private Hashtable _query = new Hashtable();
+        private TcpClient _connection = null;
+        public TcpClient Connection
+        {
+            get
+            {
+                return _connection;
+            }
+        }
 
         public Hashtable Query
         {
@@ -530,7 +546,7 @@ namespace HTTP
             }
         }
 
-        public enum Method { Get, Head, Post, Options, Null };
+        public enum Method { GET, HEAD, POST, OPTIONS, NULL };
 
         public String MethodToString()
         {
@@ -538,41 +554,148 @@ namespace HTTP
             String str = null;
             switch (meth)
             {
-                case Method.Get:
+                case Method.GET:
                     str = "GET";
                     break;
-                case Method.Head:
+                case Method.HEAD:
                     str = "HEAD";
                     break;
-                case Method.Post:
+                case Method.POST:
                     str = "POST";
                     break;
-                case Method.Options:
+                case Method.OPTIONS:
                     str = "OPTIONS";
                     break;
-                case Method.Null:
+                case Method.NULL:
                 default:
                     break;
             }
             return str;
         }
 
-
-        public HttpRequest(Method meth, string resource)
+        public HttpRequest(TcpClient connection)
         {
-            SetRequestMethod(meth, resource);
+            _connection = connection;
+            string[] request = ReadRequest();
+            parseRequest(request);
+        }
+        
+        private void parseRequest(string[] strReq)
+        {
+            if (strReq.Length > 0) 
+            { 
+                var headerStr = strReq[0];
+                string body = null;
+                //sets body if it is present
+                if (strReq.Length > 1)
+                {
+                    body = strReq[1];
+                }
+                //splits the raw header string into a string array of header lines
+                var headers = headerStr.Split(new string[] {"\r\n"}, StringSplitOptions.RemoveEmptyEntries);
+
+                //first header is special (no ':')
+                //does some special parsing of the first line
+                string[] methodLine = null;//starts first line as null
+                //if there is at least one header line
+                if (headers.Length != 0)
+                {
+                    methodLine = headers[0].Split(' ');//divide it by spaces
+                }
+               
+                //if the method line is close to proper format parsing is attempted
+                if (methodLine != null && methodLine.Length == 3)
+                {
+                    _requestMethod = StringToMethod(methodLine[0]);
+                    _resource = methodLine[1];
+                }
+                else
+                {
+                    _requestMethod = Method.NULL;//this is an indication of an invalid method
+                    _resource = "/";
+                }
+
+                //this loop will not add first header
+                foreach (string header in headers)
+                {
+                    string[] token = header.Split(new char[] {':'}, 2);
+                    if (token.Length == 2)
+                    {
+                        AddHeader(token[0].Trim(), token[1].Trim());
+                    }
+                }
+
+                _body = body;
+            }
+
+            //checks for a query string
+            if (_resource.Contains("?"))
+            {
+                string[] query;
+                int startQuery = _resource.IndexOf("?") + 1;
+                int endQuery = _resource.IndexOf("#");//accounts for fragments
+
+                if (endQuery != -1)
+                {
+                    query = _resource.Substring(startQuery, endQuery - startQuery).Split('&');
+                }
+                else
+                {
+                    query = _resource.Substring(startQuery).Split('&');
+                }
+
+
+                //removes query and stores it to the request
+                _resource = _resource.Substring(0, startQuery - 1);
+                SetQuery(query);
+            }
+        }
+        /// <summary>
+        /// Reads (presummed) request from this HttpRequest's TcpClient's stream
+        /// </summary>
+        /// <returns>A string array containing the header(index 0) and the body(index 1 if present)</returns>
+        private string[] ReadRequest()
+        {
+            var sr = new StreamReader(_connection.GetStream());
+
+            var header = "";
+            var body = "";
+
+
+            //reads header
+            while (!header.Contains("\r\n\r\n"))
+            {
+                char chur = (char)sr.Read();
+                header += chur;
+               // Console.Write(chur);
+            }
+
+            if ((header.Contains("POST") || header.Contains("post")))
+            {
+                while (!body.Contains("\r\n\r\n"))
+                {
+                    body += "" + (char)sr.Read();
+                }
+            }
+
+
+
+            return new string[] {header, body};
         }
 
-        public HttpRequest(string meth, string resource, string body)
+        public bool IsValid()
         {
-            SetRequestMethod(StringToMethod(meth), resource);
-            Body = body;
+            //valid if the request method != null
+            return (_requestMethod != Method.NULL);
         }
 
-        public HttpRequest(Method meth, string resource, string body)
-            : this(meth, resource)
+        public void Dispose()
         {
-            Body = body;
+            if (_connection.Connected) //makes sure the stream hasn't been closed before attempting to close it
+            { 
+                _connection.GetStream().Close();
+                _connection.Close();
+            }
         }
 
         public void SetQuery(string[] query)
@@ -591,61 +714,30 @@ namespace HTTP
 
             }
         }
-        public void SetRequestMethod(Method meth, string resource)
-        {
-            var methodHeader = "";
-
-            switch (meth)
-            {
-                case Method.Get:
-                    methodHeader += "GET";
-                    break;
-                case Method.Head:
-                    methodHeader += "HEAD";
-                    break;
-                case Method.Post:
-                    methodHeader += "POST";
-                    break;
-                case Method.Options:
-                    methodHeader += "OPTIONS";
-                    break;
-                case Method.Null:
-                    methodHeader += "NULL";
-                    break;
-                default:
-                    //should be impossible to get here
-                    throw new Exception("Congraulations, you managed to pass this method an invalid HttpRequest.Method enum type.");
-            }
-            _requestMethod = meth;
-            _resource = resource;
-            methodHeader += " " + resource + " HTTP/1.1";
-
-            AddHeader(MethodKey, methodHeader);
-        }
         public void AddHeader(string header, string value)
         {
             headers.Add(header, value);
         }
 
-        private Method StringToMethod(string meth)
+        public Method StringToMethod(string meth)
         {
-            Method method = Method.Null;
+            Method method = Method.NULL;
 
             if (meth.ToLower().Equals("get"))
             {
-                method = Method.Get;
+                method = Method.GET;
             }
             else if (meth.ToLower().Equals("head"))
             {
-                method = Method.Head;
+                method = Method.HEAD;
             }
             else if (meth.ToLower().Equals("options"))
             {
-                method = Method.Options;
+                method = Method.OPTIONS;
             }
             else if (meth.ToLower().Equals("post"))
             {
-                method = Method.Post;
+                method = Method.POST;
             }
 
             return method;
@@ -698,7 +790,7 @@ namespace HTTP
         {
             string str = "";
 
-            var mod = (String)headers[MethodKey];
+            var mod = _resource;
             int queryIns = mod.LastIndexOf(" ");
             var query = GetQueryString();
 
@@ -707,7 +799,7 @@ namespace HTTP
                 mod = mod.Insert(queryIns, "?" + GetQueryString() + " ");
             }            
 
-            str += mod+"\r\n";
+            str += _requestMethod + " " + mod + " HTTP/1.1\r\n";
 
             int count = 0;
             foreach (string headerName in headers.Keys)

@@ -14,7 +14,7 @@ namespace SimpleHttpServer
 {
     
     //Singleton
-    class Program : IConnectionListener
+    public class Program : IConnectionListener
     {
         private bool _run = true;
         public const string hr = "--------------------------------------------------------------------";
@@ -163,8 +163,16 @@ namespace SimpleHttpServer
             //sets up the working path, and the resource path
             _workingPath = _workingPath.Substring(0, _workingPath.IndexOf("\\SWAP\\", _workingPath.IndexOf("\\SWAP\\")+1));
 
-            parseConfigFile(_workingPath + "\\swap_config.cnfg");
+            ConfigParser p = new ConfigParser();
 
+            var parsed = p.ParseFile(_workingPath + "\\swap_config.cnfg");
+
+            if (!parsed)
+            {
+                Console.WriteLine("Failed to parse config file...\nPress enter to exit.");
+                Console.Read();
+                Environment.Exit(1);
+            }
 
             _resourcePath = _workingPath + _resourcePath;
 
@@ -201,10 +209,60 @@ namespace SimpleHttpServer
             return ret;
         }
 
-        private void parseConfigFile(string fname)
+        public static void Main(String[] args)
+        {
+            instance();
+        }
+
+        private string[] ParseHttpAddr(string addr)
+        {
+            int startInd = 0;
+
+            //gets rid of unnecessary http:// or https:// in web address
+            if (addr.Contains("http://"))
+            {
+                startInd += "http://".Length;
+            }
+            else if (addr.Contains("https://"))
+            {
+                startInd += "https://".Length;
+            }
+
+            //seprates the host and resource
+            char[] toSep = { '/' };
+            string[] tokens = addr.Substring(startInd).Split(toSep, 2);
+
+            return tokens;
+        }
+
+        public void Notify(TcpClient connection)
+        {
+            Console.WriteLine("Program: Connection Received!");
+            bool block = false;
+            HttpRequest request = new HttpRequest(connection);
+            Console.WriteLine("Program: Request Read, and Processed!");
+            served++;
+                
+            //TODO not working with chrome!!!
+            //this loop waits for a connection to be freed
+
+            _currentConnections.Add(request);
+            Thread t = new Thread(() => new RequestHandler(ref request));
+            t.Start();
+        }
+
+    }
+    /*
+     ****************************
+     * CLASS START ConfigParser
+     ****************************
+     */
+    public class ConfigParser
+    {
+        public bool ParseFile(string fname)
         {
             bool fail = false;
-            Program inst = this;
+            Program inst = Program.instance();
 
             if (File.Exists(fname))
             {
@@ -241,118 +299,51 @@ namespace SimpleHttpServer
                         {
                             token[j] = token[j].Trim();
                         }
-                            if (token.Length == 2)//must be 2 or something went wrong
+                        if (token.Length == 2)//must be 2 or something went wrong
+                        {
+                            PropertyInfo pi = inst.GetType().GetProperty(token[0]);//attempts to get the specified property
+                            if (pi != null)//if the property exists it is set
                             {
-                                PropertyInfo pi = GetType().GetProperty(token[0]);//attempts to get the specified property
-                                if (pi != null)//if the property exists it is set
+                                try
                                 {
-                                    try
-                                    {
-                                        if (pi.GetValue(this).GetType().Equals("".GetType()))//if property type is a string
-                                            pi.SetValue(inst, token[1]);
-                                        else//if it is a number
-                                            pi.SetValue(inst, Int32.Parse(token[1]));
-                                        Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(inst));
-                                    }
-                                    catch (TargetInvocationException tie)//if the data is not accepted by the setter method
-                                    {
-                                        Console.WriteLine("\nInvalid format on line "+ i +" "+tie.InnerException.Message+"\n");
-                                        fail = true;
-                                    }
-                                    catch (TargetException te)
-                                    {
-                                        Console.WriteLine("Target Exception on line "+ i + ", Property: "+token[0] +"\n"+te.Message);
-                                        fail = true;
-                                    }
-                                    
+                                    if (pi.GetValue(inst).GetType().Equals("".GetType()))//if property type is a string
+                                        pi.SetValue(inst, token[1]);
+                                    else//if it is a number
+                                        pi.SetValue(inst, Int32.Parse(token[1]));
+                                    Console.WriteLine("'" + token[0] + "' set to " + pi.GetValue(inst));
                                 }
-                                else//otherwise an error message is printed because property doesn't exist
+                                catch (TargetInvocationException tie)//if the data is not accepted by the setter method
                                 {
-                                    Console.WriteLine("\nNon-existant property " + token[0] + " on line " + i+"\n");
+                                    Console.WriteLine("\nInvalid format on line " + i + " " + tie.InnerException.Message + "\n");
+                                    fail = true;
+                                }
+                                catch (TargetException te)
+                                {
+                                    Console.WriteLine("Target Exception on line " + i + ", Property: " + token[0] + "\n" + te.Message);
                                     fail = true;
                                 }
 
                             }
-                            else//if token.Length != 2 then the syntax was not correct
+                            else//otherwise an error message is printed because property doesn't exist
                             {
-                                Console.WriteLine("\nFailed to parse line " + i + "! \""+curStr+"\"\n");
+                                Console.WriteLine("\nNon-existant property " + token[0] + " on line " + i + "\n");
                                 fail = true;
                             }
-                        
+
+                        }
+                        else//if token.Length != 2 then the syntax was not correct
+                        {
+                            Console.WriteLine("\nFailed to parse line " + i + "! \"" + curStr + "\"\n");
+                            fail = true;
+                        }
+
                     }
                 }
 
             }
-            else
-            {
-                Console.WriteLine("\nCould not find "+ fname +", Server could not be started!!!");
-                fail = true;
-            }
 
-            if (fail)
-            {
-                Console.WriteLine("\nFailed to parse configuration file!");
-                Console.WriteLine("Press Enter to Exit...");
-                Console.Read();
-                Environment.Exit(1);
-            }
-            else
-            {
-                Console.WriteLine("\nSuccessfully read config file!\n");
-            }
+            return !fail;
         }
-
-        public static void Main(String[] args)
-        {
-            instance();
-        }
-
-        private string[] ParseHttpAddr(string addr)
-        {
-            int startInd = 0;
-
-            //gets rid of unnecessary http:// or https:// in web address
-            if (addr.Contains("http://"))
-            {
-                startInd += "http://".Length;
-            }
-            else if (addr.Contains("https://"))
-            {
-                startInd += "https://".Length;
-            }
-
-            //seprates the host and resource
-            char[] toSep = { '/' };
-            string[] tokens = addr.Substring(startInd).Split(toSep, 2);
-
-            return tokens;
-        }
-
-        public void Notify(TcpClient connection)
-        {
-            bool block = false;
-            served++;
-            if (_currentConnections.Count == _threadMax)//if thread capacity is reached
-            {
-                block = true;//this request must wait to be served
-                Console.WriteLine("Thread Cap reached, blocking");
-            }
-            //TODO not working with chrome!!!
-            //this loop waits for a connection to be freed
-            while (block)//TODO add a time out. When the time out occurs the user is redirected to a page saying the server is experiencing many requests (high traffic)
-            {
-                if (_currentConnections.Count != _threadMax)
-                {
-                    block = false;
-                    Console.WriteLine("End blocking");
-                }
-            }
-
-            _currentConnections.Add(connection);
-            Thread t = new Thread(() => new RequestHandler(ref connection));
-            t.Start();
-        }
-
     }
     /*
      ****************************
@@ -452,11 +443,11 @@ namespace SimpleHttpServer
 
                     for (int i = 0; i < con.Count; i++)
                     {
-                        TcpClient curCon = (TcpClient) con[i];
+                        HttpRequest curCon = (HttpRequest) con[i];
                         
                         try
                         {
-                            Console.WriteLine((i+1) + ": " + curCon.Client.RemoteEndPoint);
+                            Console.WriteLine((i+1) + ": " + curCon.Connection.Client.RemoteEndPoint + " ---------- accessing: " + curCon.Resource);
                         }
                         catch (ObjectDisposedException ode)
                         {
@@ -468,11 +459,11 @@ namespace SimpleHttpServer
                     }
                     if (con.Count == 0)
                     {
-                        Console.WriteLine("No current connections");
+                        Console.WriteLine("<No current connections>");
                     }
                     else
                     {
-                        Console.WriteLine(con.Count + " current connections");
+                        Console.WriteLine("<" + con.Count + " current connections>");
                     }
 
                         break;
@@ -522,9 +513,11 @@ namespace SimpleHttpServer
         {
             while (_isRunning)
             {
+                Console.WriteLine("HttpServer: Connection Received!");
                 TcpClient client = _server.AcceptTcpClient();
                 _currentConnections.Add(client);
-                _toNotify.Notify(client);
+                Thread t = new Thread(() =>_toNotify.Notify(client));
+                t.Start();
             }
         }
 
@@ -574,18 +567,16 @@ namespace SimpleHttpServer
      */
     class RequestHandler
     {
-        private TcpClient _currentConnection = null;
-        private Stream _currentStream = null;
+        private HttpRequest _request = null;
 
         /// <summary>
         /// This method takes a TcpClient in and attempts to read, process and respond to an HTTP/1.1 request
         /// </summary>
         /// <param name="client">A TcpClient (pressumably with an HTTP request) to handle</param>
-        public RequestHandler(ref TcpClient client)
+        public RequestHandler(ref HttpRequest request)
         {
-            _currentConnection = client;
-            _currentStream = client.GetStream();
-            HandleRequest();
+            _request = request;
+            ProcessRequest();
             Dispose();
         }
         /// <summary>
@@ -593,61 +584,20 @@ namespace SimpleHttpServer
         /// </summary>
         public void Dispose()
         {
-            Program.instance().CurrentConnections.Remove(_currentConnection);
-            _currentConnection.Close();
+            Console.WriteLine("########################");
+            Console.WriteLine("RequestHandler disposed --- Resource: " + _request.Resource);
+            Console.WriteLine("########################");
+            Program.instance().CurrentConnections.Remove(_request);
+            _request.Dispose();
         }
 
-        /// <summary>
-        /// This method handles the entirity of request processing
-        /// </summary>
-        private void HandleRequest()
+        public void ProcessRequest()
         {
-            string request = ReadRequest();
-            
-            ProcessRequest(request);
-
-            _currentStream.Close();
-        }
-
-        private void ProcessRequest(string request)
-        {
-            var header = "";
-            var body = "";
-            HttpRequest httpRequest = null;
             Program prg = Program.instance();
 
-            var headerLength = request.IndexOf("\r\n\r\n") + "\r\n\r\n".Length;
-
-            header = request.Substring(0, headerLength);
-
-            body = request.Substring(headerLength);
-
-            var resource = GetResource(header);
-
-            httpRequest = setupRequest(ref header, ref body);
 
             //if the resource contains a query, this block handls it
-            if (resource.Contains("?"))
-            {
-                string[] query;
-                int startQuery = resource.IndexOf("?")+1;
-                int endQuery = resource.IndexOf("#");//accounts for fragments
-
-             //   Console.WriteLine("Resource: " + resource);
-                if (endQuery != -1)
-                {
-                    query = resource.Substring(startQuery, endQuery - startQuery).Split('&');
-                }
-                else
-                {
-                    query = resource.Substring(startQuery).Split('&');
-                }
-                
-             
-                //removes query and stores it to the request
-                resource = resource.Substring(0, startQuery-1);
-                httpRequest.SetQuery(query);
-            }
+            var resource = _request.Resource;
 
             if (!resource.Contains("."))//not a file request, therefore defaults to server's default home page of requested directory
             {
@@ -659,49 +609,25 @@ namespace SimpleHttpServer
                 var path = resource + prg.HomePage;
                 path = path.Replace('/', '\\');
                 path = path.Substring(1);//gets rid of extra \ at beginning of resource path
-                SendResponse(ref path, ref httpRequest);//should be home page
+                _request.Resource = path;
+                SendResponse();//should be home page
             }
             else//file request
             {
                 resource = resource.Substring(1);//removes the / if it isn't the homepage request
                 resource = resource.Replace("/", "\\");//replaces any remaining / in the url
-                SendResponse(ref resource, ref httpRequest);
+                _request.Resource = resource;
+                SendResponse();
             }
         }
-        private HttpRequest setupRequest(ref string header, ref string body)
-        {
-            var firstLine = header.Substring(0, header.IndexOf("\r\n"));
-            var reqMethod = firstLine.Split(' ')[0];
-            var resource = firstLine.Split(' ')[1];
-            HttpRequest request = new HttpRequest(reqMethod, resource, body);
 
-            string[] lines = header.Split(new string[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
-
-            for (int i = 1; i < lines.Length; i++)
-            {
-                //this ensures that if there is a ':' in the value section it doesn't affect the value
-                string[] curTokens = lines[i].Split(new char[] {':'}, 2);
-               
-                try
-                {
-                    request.AddHeader(curTokens[0], curTokens[1]);
-                }
-                catch (IndexOutOfRangeException ioore)
-                {
-                    //header is not added if there are not two tokens
-                }
-                
-            }
-
-        //    Console.WriteLine("REQUEST OBJECT:\n---------------\n"+request);
-
-            return request;
-        }
-
-        private void SendResponse(ref string resource, ref HttpRequest request)
+        public void SendResponse()
         {
             HttpResponse response = null;
             Program prg = Program.instance();
+            Stream strm = _request.Connection.GetStream();//gets the request's stream
+            var resource = _request.Resource;
+
      //       Console.Write(Program.ResourcePath + resource+" | Exists = ");
       //      Console.WriteLine(File.Exists(Program.ResourcePath + resource));
 
@@ -715,46 +641,47 @@ namespace SimpleHttpServer
                     
                     var fs = new FileStream(prg.ResourcePath + resource, FileMode.Open, FileAccess.Read);
 
-                    if (request.GetValue("Range") != null)
+                    if (_request.GetValue("Range") != null)
                     {
                         response.SetHeader("Accept-Ranges", "bytes");
                         streamed = true;
                     }
 
-                    var fileEnding = getFileType(resource);
+                    var fileEnding = getFileType(resource);//gets file ending
+                    //if php, must be parsed before being sent
                     if (fileEnding.Equals("php"))
                     {
-                        var body = PHP_SAPI.Parse(prg.ResourcePath + resource, request);
+                        var body = PHP_SAPI.Parse(prg.ResourcePath + resource, _request);
                         string[] rName = resource.Split('/');
                         response.SetContentType("html", rName[rName.Length - 1]);
                         response.SetHeader("Content-Length", "" + body.Length);
-                        response.Send(ref _currentStream, ref body);
+                        response.Send(ref strm, ref body);
                     }
                     else
                     {
-                        bool isText = true;
 
-                        if (fs.Length <= 30000000 && !streamed)//if the file is less than 30MB send normally
+                        if (fs.Length <= 30000000 && !streamed)//if the file is less than 30MB send normally && the file was not requested to be streamed
                         {
                             string[] rName = resource.Split('/');
-                            isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
+                            response.SetContentType(fileEnding, rName[rName.Length - 1]);//sets the Content-Type of a respones and checks if the type is text
 
                             //         Console.Error.WriteLine("isText? -->" + isText);
 
                             response.SetHeader("Content-Length", "" + fs.Length);
-                            if (streamed)
-                            {
-                                response.SetHeader("Content-Range", "bytes 0-"+fs.Length+"/*");
-                            }
-                            response.Send(ref _currentStream, ref fs);
+ 
+                            response.Send(ref strm, ref fs);
                         }
                         else//send chunked
                         {
                             string[] rName = resource.Split('/');
-                            isText = response.SetContentType(fileEnding, rName[rName.Length - 1]);
+                            response.SetContentType(fileEnding, rName[rName.Length - 1]);
                             response.SetHeader("Transfer-Encoding", "chunked");
+                            if (streamed)
+                            {
+                                response.SetHeader("Content-Range", "bytes 0-" + fs.Length + "/*");
+                            }
                             response.SetHeader("Content-Length", "" + fs.Length);
-                            response.SendChunked(ref _currentStream, ref fs);
+                            response.SendChunked(ref strm, ref fs);
                         }
                     }
                 }
@@ -768,7 +695,7 @@ namespace SimpleHttpServer
                         FileStream fs = File.Open(prg.ResourcePath + prg.AccessDenied, FileMode.Open, FileAccess.Read);
                         response.SetHeader("Content-Type", "text/html");
                         response.SetHeader("Content-Length", "" + fs.Length);
-                        response.Send(ref _currentStream, ref fs);
+                        response.Send(ref strm, ref fs);
                         fs.Close();
                     }
                     else
@@ -776,7 +703,7 @@ namespace SimpleHttpServer
                         string page = "<html><body><h1>403 Access Denied:</h1> <p>" + resource + "</p></body></html>";
                         response.SetContentType("html", prg.AccessDenied);
                         response.SetHeader("Content-Length", "" + page.Length);
-                        response.Send(ref _currentStream, ref page);
+                        response.Send(ref strm, ref page);
                     }
                 }
                 
@@ -792,7 +719,7 @@ namespace SimpleHttpServer
                     FileStream fs = File.Open(prg.ResourcePath + prg.Page404, FileMode.Open, FileAccess.Read);
                     response.SetHeader("Content-Type", "text/html");
                     response.SetHeader("Content-Length", "" + fs.Length);
-                    response.Send(ref _currentStream, ref fs);
+                    response.Send(ref strm, ref fs);
                     fs.Close();
                 }
                 else
@@ -800,14 +727,14 @@ namespace SimpleHttpServer
                     string page = "<html><body><h1>404 file not found:</h1> <p>" + resource + "</p></body></html>";
                     response.SetContentType("html", prg.Page404);
                     response.SetHeader("Content-Length", ""+page.Length);
-                    response.Send(ref _currentStream, ref page);
+                    response.Send(ref strm, ref page);
                 }
 
 
             }
         }
         
-        private string getFileType(string fileName)
+        public string getFileType(string fileName)
         {
             var type = "";
             var tokens = fileName.Split('.');
@@ -832,7 +759,7 @@ namespace SimpleHttpServer
             return type;
         }
 
-        private static string GetResource(string header)
+        public static string GetResource(string header)
         {
             int endFirstLine = header.IndexOf("\r\n");
             string firstLine = header.Substring(0, endFirstLine);
@@ -842,36 +769,6 @@ namespace SimpleHttpServer
             return fLPart[1];
         }
 
-        private string ReadRequest()
-        {
-            var request = "";
-            var sr = new StreamReader(_currentStream);
-
-            
-            var header = "";
-            var body = "";
-            
-
-            //reads header
-            while (!header.Contains("\r\n\r\n"))
-            {
-                header += "" + (char)sr.Read();
-
-            }
-
-            if (header.Contains("POST") || header.Contains("post")) 
-            {
-                while (!body.Contains("\r\n\r\n"))
-                {
-                    body += ""+(char)sr.Read();
-                }
-            }
-
-            request = header + body;
-
-            return request;
-        }
-
         /// <summary>
         /// This method request an resource from an HTTP server and returns a string representation of the body
         /// </summary>
@@ -879,7 +776,7 @@ namespace SimpleHttpServer
         /// <exception cref = "SocketException"> Thrown when you can't connect to the given address (no such host, or no internet connectivity </exception>
         /// <returns>A string representation of the response from addr</returns>
 
-        private static string HttpBodyRequest(string addr)
+        public static string HttpBodyRequest(string addr)
         {
             string response = "";
             TcpClient client = null;
