@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Collections;
 using System.Net.Sockets;
+using System.Web;
+using System.Text.RegularExpressions;
 
 
 namespace HTTP
@@ -21,7 +23,7 @@ namespace HTTP
         //TODO Add a constructor that takes in a string representation of a request and converts it to an HttpResponse object
         private Hashtable headers = new Hashtable();
         private const string STATUS_LINE = "status";
-        private string CRLF = "\r\n";
+        private string CRLF = SimpleHttpServer.Program.CRLF;
 
         private int _chunkSize = 5243000;//default chunk size of 5MB
 
@@ -58,6 +60,9 @@ namespace HTTP
                     break;
                 case 400:
                     headerStart += "400 Bad Request";
+                    break;
+                case 401:
+                    headerStart += "401 Unauthorized";
                     break;
                 case 403:
                     headerStart += "403 Forbidden";
@@ -155,7 +160,7 @@ namespace HTTP
                     chunkSize = remaining;
                 }
 
-                string chunk = Convert.ToString(chunkSize, 16) + "\r\n";//hexidecimal representation of the
+                string chunk = Convert.ToString(chunkSize, 16) + CRLF;//hexidecimal representation of the
                 byte[] chunkBuffer = new byte[chunkSize];
 
 
@@ -174,7 +179,7 @@ namespace HTTP
             if (!stop)
             {
                 //sends the final zero
-                string chunkEnder = "0\r\n";
+                string chunkEnder = "0" + CRLF;
                 SendString(ref strm, ref chunkEnder);
             }
 
@@ -450,7 +455,7 @@ namespace HTTP
         {
             var str = "";
 
-            str += headers[STATUS_LINE] + "\r\n";
+            str += headers[STATUS_LINE] + " " +CRLF;
 
             int count = 0;
             foreach (string headerName in headers.Keys)
@@ -458,7 +463,7 @@ namespace HTTP
                 //skips method line
                 if (!headerName.Equals(STATUS_LINE))
                 {
-                    str += headerName.Trim() + ": " + count + " \r\n";
+                    str += headerName.Trim() + ": " + count + " " + CRLF;
                 }
                 count++;
             }
@@ -476,7 +481,7 @@ namespace HTTP
                 count++;
             }
 
-            str += "\r\n";//extra \r\n to seperate header from body
+            str += CRLF;//extra line ender to seperate header from body
 
             return str;
         }
@@ -502,7 +507,8 @@ namespace HTTP
         private const string MethodKey = "method";
         private Method _requestMethod = Method.NULL;
         private String _resource = "/";
-        private Stream _stream = null;
+        private StreamReader _sr = null;
+        private string CRLF = SimpleHttpServer.Program.CRLF;
 
         public String Resource
         {
@@ -513,7 +519,7 @@ namespace HTTP
             set
             {
                 //add error checking
-                _resource = value;
+                _resource = HttpUtility.UrlDecode(value);
             }
         }
         
@@ -522,8 +528,14 @@ namespace HTTP
         {
             get { return _requestMethod; }
         }
-        private string _body = "";
-        private Hashtable _query = new Hashtable();
+
+        private Hashtable _body = new Hashtable();
+        public Hashtable Body
+        {
+            get { return _body; }
+        }
+
+        
         private TcpClient _connection = null;
         public TcpClient Connection
         {
@@ -533,19 +545,12 @@ namespace HTTP
             }
         }
 
+        private Hashtable _query = new Hashtable();
         public Hashtable Query
         {
             get { return _query; }
         }
-        public string Body
-        {
-            get { return _body; }
-            set
-            {
-                _body = value;
-            }
-        }
-
+  
         public enum Method { GET, HEAD, POST, OPTIONS, NULL };
 
         public String MethodToString()
@@ -576,57 +581,52 @@ namespace HTTP
         public HttpRequest(TcpClient connection)
         {
             _connection = connection;
-            string[] request = ReadRequest();
-            parseRequest(request);
+            _sr = new StreamReader(connection.GetStream());
+            string header = ReadRequest();
+            parseRequest(header);
         }
         
-        private void parseRequest(string[] strReq)
+        private void parseRequest(string strReq)
         {
-            if (strReq.Length > 0) 
-            { 
-                var headerStr = strReq[0];
-                string body = null;
-                //sets body if it is present
-                if (strReq.Length > 1)
-                {
-                    body = strReq[1];
-                }
-                //splits the raw header string into a string array of header lines
-                var headers = headerStr.Split(new string[] {"\r\n"}, StringSplitOptions.RemoveEmptyEntries);
+            var headerStr = strReq;
+            string body = "";
 
-                //first header is special (no ':')
-                //does some special parsing of the first line
-                string[] methodLine = null;//starts first line as null
-                //if there is at least one header line
-                if (headers.Length != 0)
-                {
-                    methodLine = headers[0].Split(' ');//divide it by spaces
-                }
-               
-                //if the method line is close to proper format parsing is attempted
-                if (methodLine != null && methodLine.Length == 3)
-                {
-                    _requestMethod = StringToMethod(methodLine[0]);
-                    _resource = methodLine[1];
-                }
-                else
-                {
-                    _requestMethod = Method.NULL;//this is an indication of an invalid method
-                    _resource = "/";
-                }
+            //splits the raw header string into a string array of header lines
+            var headers = headerStr.Split(new string[] {CRLF}, StringSplitOptions.RemoveEmptyEntries);
 
-                //this loop will not add first header
-                foreach (string header in headers)
-                {
-                    string[] token = header.Split(new char[] {':'}, 2);
-                    if (token.Length == 2)
-                    {
-                        AddHeader(token[0].Trim(), token[1].Trim());
-                    }
-                }
-
-                _body = body;
+            //first header is special (no ':')
+            //does some special parsing of the first line
+            string[] methodLine = null;//starts first line as null
+            //if there is at least one header line
+            if (headers.Length != 0)
+            {
+                methodLine = headers[0].Split(' ');//divide it by spaces
             }
+               
+            //if the method line is close to proper format parsing is attempted
+            if (methodLine != null && methodLine.Length == 3)
+            {
+                _requestMethod = StringToMethod(methodLine[0]);
+                _resource = methodLine[1];
+            }
+            else
+            {
+                _requestMethod = Method.NULL;//this is an indication of an invalid method
+                _resource = "/";
+            }
+
+            //this loop will not add first header
+            foreach (string header in headers)
+            {
+                string[] token = header.Split(new char[] {':'}, 2);
+                if (token.Length == 2)
+                {
+                    AddHeader(token[0].Trim(), token[1].Trim());
+                }
+            }
+
+                
+            
 
             //checks for a query string
             if (_resource.Contains("?"))
@@ -647,40 +647,68 @@ namespace HTTP
 
                 //removes query and stores it to the request
                 _resource = _resource.Substring(0, startQuery - 1);
-                SetQuery(query);
+                SetQuery(query, ref _query);
+            }
+
+            //handles content body here
+            if (RequestMethod == Method.POST)
+            {
+                //if content type includes a ';' this code gets just the type and temporarily ignore any extra
+                var contentType = GetValue("Content-Type").ToLower();
+                contentType = contentType.Substring(0, contentType.IndexOf(";"));
+               
+                //this decides how to read/parse the content
+                if (contentType.Equals("application/x-www-form-urlencoded"))
+                {
+                    //read the body (simple format)
+                    int length = Int32.Parse(GetValue("Content-Length"));
+                    for (int i = 0; i < length; i++)
+                    {
+                        if (_sr.EndOfStream)
+                            break;
+                        char cur = (char)_sr.Read();
+                        body += "" + cur;
+        
+
+                    }
+
+                    string[] parameters = body.Split('&');
+                    if (parameters.Length > 0)
+                    {
+                        SetQuery(parameters, ref _body);
+                    }
+
+                }
+                else if (contentType.Equals("multipart/form-data"))
+                {
+                    //other file encoding (not yet supported)
+                    //TODO
+                    var parts = MultipartParser.Parse(_sr, this);
+                    foreach (var part in parts)
+                        Console.WriteLine("Disposition: " + part.GetValue("Content-Disposition"));
+
+                }
+         
             }
         }
         /// <summary>
         /// Reads (presummed) request from this HttpRequest's TcpClient's stream
         /// </summary>
         /// <returns>A string array containing the header(index 0) and the body(index 1 if present)</returns>
-        private string[] ReadRequest()
+        private string ReadRequest()
         {
-            var sr = new StreamReader(_connection.GetStream());
 
-            var header = "";
-            var body = "";
+            var header = new StringBuilder();
 
 
             //reads header
-            while (!header.Contains("\r\n\r\n"))
+            while (!header.ToString().Contains(CRLF + CRLF))
             {
-                char chur = (char)sr.Read();
-                header += chur;
-               // Console.Write(chur);
+                char chur = (char)_sr.Read();
+                header.Append(chur);
             }
-
-            if ((header.Contains("POST") || header.Contains("post")))
-            {
-                while (!body.Contains("\r\n\r\n"))
-                {
-                    body += "" + (char)sr.Read();
-                }
-            }
-
-
-
-            return new string[] {header, body};
+  
+            return header.ToString();
         }
 
         public bool IsValid()
@@ -698,22 +726,23 @@ namespace HTTP
             }
         }
 
-        public void SetQuery(string[] query)
+        public void SetQuery(string[] query, ref Hashtable toSet)
         {
             for (int i = 0; i < query.Length; i++)
             {
                 var tokens = query[i].Split('=');
                 try
                 {
-                    _query.Add(tokens[0], tokens[1]);
+                    toSet.Add(tokens[0], tokens[1]);
                 }
                 catch (IndexOutOfRangeException ioore)
                 {
-                    _query.Add(tokens[0], "");
+                    toSet.Add(tokens[0], "");
                 }
 
             }
         }
+
         public void AddHeader(string header, string value)
         {
             headers.Add(header, value);
@@ -778,7 +807,7 @@ namespace HTTP
                     i++;
                 }
             }
-            catch (NullReferenceException nre)
+            catch (NullReferenceException)
             {
                 //thrown if no queries are in the hashtable
             }
@@ -799,7 +828,7 @@ namespace HTTP
                 mod = mod.Insert(queryIns, "?" + GetQueryString() + " ");
             }            
 
-            str += _requestMethod + " " + mod + " HTTP/1.1\r\n";
+            str += _requestMethod + " " + mod + " HTTP/1.1" + CRLF;
 
             int count = 0;
             foreach (string headerName in headers.Keys)
@@ -807,7 +836,7 @@ namespace HTTP
                 //skips method line
                 if (!headerName.Equals(MethodKey))
                 {
-                    str += headerName.Trim() + ": " + count + " \r\n";
+                    str += headerName.Trim() + ": " + count + " " + CRLF;
                 }
                 count++;
             }
@@ -826,12 +855,143 @@ namespace HTTP
             }
 
             //header-body seperation
-            str += "\r\n";
+            str += CRLF;
 
-            str += Body;
-
+            var len = Body.Keys.Count;
+            int ind = 0;
+            foreach (var key in Body.Keys)
+            {
+                str += key + "=" + Body[key];
+                ind++;
+                if (ind != len)
+                {
+                    str += "&";
+                }
+            }
+            //ending double CRLF
+            str += CRLF + CRLF;
 
             return str;
+        }
+    }
+
+    public static class MultipartParser
+    {
+        public static List<Multipart> Parse(StreamReader sr, HttpRequest request)
+        {
+            string CRLF = SimpleHttpServer.Program.CRLF;
+            List<Multipart> data = new List<Multipart>(5);
+            //gets the boundary delimiter
+            var boundary = request.GetValue("Content-Type").ToLower();
+            boundary = boundary.Substring(boundary.IndexOf(";"));
+            boundary = boundary.Substring(boundary.IndexOf("=") + 1).Trim();
+            //Console.WriteLine("Boundary = '" + boundary + "'");
+
+            //gets the content length
+            var lengthStr = request.GetValue("Content-Length");
+            int length = Int32.Parse(lengthStr);
+            //Console.WriteLine("Length: " + length);
+
+            //ind is the current index in the multipart response body
+            int ind = 0;
+            //this is the main loop that reads each part
+            //TODO finish
+            while (ind < length)
+            {
+                var curPart = "";
+                //this will read the header of the current part
+                while(!curPart.Contains(CRLF + CRLF))
+                {
+
+                    curPart += "" + (char) sr.Read();
+                    ind++;//marks that a char was read
+                }
+
+ 
+
+                //splits up the current part header
+                var lines = curPart.Split(new []{CRLF}, StringSplitOptions.RemoveEmptyEntries);
+                //this parses the header and creates a Multipart object
+                Multipart mp = new Multipart();
+
+                foreach(var line in lines)
+                {
+                    if (!line.Contains(boundary))
+                    {
+                        var tokens = line.Split(new []{':'}, 2);
+                        mp.AddAttribute(tokens[0].Trim(),
+                                        tokens[1].Trim());
+                    }
+                }
+                //Console.WriteLine("Multipart Header:\n" + mp.ToString());
+                //get rid of header
+                curPart = "";
+
+                //now read body
+                while(!curPart.Contains("--" + boundary + "--" + CRLF) &&
+                      !curPart.Contains("--" + boundary + CRLF)){
+
+                    curPart += "" + (char)sr.Read();
+                    ind++;//marks that is read a char
+                    Console.WriteLine(ind + "/" + length);
+                }
+
+               // Console.WriteLine("Multipart Body:\n" + curPart.ToString());
+                //gets rid of extra boundarys and CRLFs
+                var content = curPart;
+                content = content.Replace("--" + boundary + "--" + CRLF, "");//if it is the last part
+                content = content.Replace("--" + boundary + CRLF, "");//if it isn't the last part
+
+                //sets multipart's content
+                mp.Content = content.Trim();
+
+               // Console.WriteLine("Non-parsed: " + curPart.ToString() + CRLF + boundary);
+                //Console.WriteLine("Parsed: \"" + content + "\"");
+                if (curPart.Contains("--" + boundary + "--"))//if this is the last section
+                {
+                    //end it
+                    //sr.ReadToEnd();
+                    ind = length;
+                }
+
+               // Console.WriteLine(data.Count + mp.ToString());
+                data.Add(mp);
+            }
+            
+            return data;
+        }
+    }
+    public class Multipart
+    {
+        string CRLF = SimpleHttpServer.Program.CRLF;
+        private object _content = "";
+        public object Content
+        {
+            set { _content = value; }
+            get { return _content; }
+        }
+        private Hashtable _attributes = new Hashtable();
+        //attribute modifiers***
+        //this returns multipart to allow method chaining
+        public Multipart AddAttribute(string name, string value){
+            _attributes.Add(name, value);
+            return this;
+        }
+        public string GetValue(string name)
+        {
+            return _attributes.Contains(name) ? (string)_attributes[name] : null;
+        }
+        //to string
+        public override string ToString()
+        {
+            var str = new StringBuilder();
+
+            foreach(var key in _attributes.Keys)
+                str.Append(key + ": " + _attributes[key] + CRLF);
+
+            str.Append(CRLF + "'" + _content + "'");
+
+            return str.ToString();
         }
     }
 }

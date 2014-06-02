@@ -78,7 +78,6 @@ namespace PHP_PARSER
                 _parser = new Process();
 
                 _parser.StartInfo = psi;
-
                 _parser.Start();
                 result = true;
             }
@@ -89,7 +88,6 @@ namespace PHP_PARSER
 
         public static String Parse(string pathname, HttpRequest request)
         {
-            
             var body = "";
             if (File.Exists(pathname))
             {
@@ -122,28 +120,41 @@ namespace PHP_PARSER
                     tfs.Write(buffer, 0, buffer.Length);
 
                     mfs.Close();
+                    mfs.Dispose();
                     tfs.Close();
+                    tfs.Dispose();
 
                     _parser.StartInfo.Arguments = "\"" + scriptPath + "temp" + curNum + ".php\"";//sets argument
                     _parser.Start();//uses specified args
 
                     StreamReader sr = _parser.StandardOutput;
-                    int timeout = 1000;
+                    //read line timeout (used to stop the reading if an error occurs)
+                    int timeout = 50;//ms
                     bool stop = false;
                     Timer timer = new Timer(timeout);
                     timer.Elapsed += delegate(Object sender, ElapsedEventArgs e)
                                      {
+                                         Console.WriteLine("Elapsed!");
                                          stop = true;
                                          timer.Dispose();
                                      };
                     try
                     {
+
                         timer.Start();
                         while (!sr.EndOfStream && !stop)
                         {
                             body += sr.ReadLine();
+                            timer.Stop();
+                            timer.Start();
+                            
                         }
+                   
 
+                    }
+                    catch (ObjectDisposedException ode)
+                    {
+                        //the timeout was tripped
                     }
                     catch (OutOfMemoryException oome)
                     {
@@ -205,6 +216,7 @@ namespace PHP_PARSER
             phpPrepend += "$_SERVER['HTTP_USER_AGENT'] = \"" + request.GetValue("User-Agent") + "\";\n";
             phpPrepend += "$_SERVER['HTTP_REFERER'] = \"" + request.GetValue("Referer") + "\";\n";
             phpPrepend += "$_SERVER['QUERY_STRING'] = \"" + request.GetQueryString() + "\";\n";
+            //_parser.StartInfo.EnvironmentVariables.Add("QUERY_STRING", request.GetQueryString());
             phpPrepend += "$_SERVER['REQUEST_METHOD'] = \"" + request.MethodToString() + "\";\n";
             var method = request.RequestMethod;
             //REQUEST_METHOD, REQUEST_TIME
@@ -217,6 +229,15 @@ namespace PHP_PARSER
                 foreach (var key in query.Keys)
                 {
                     phpPrepend += "$_GET['" + key + "'] = \"" + query[key] + "\";\n";
+                }
+            }
+            //Sets post parameters
+            Hashtable post = request.Body;
+            if (post != null)
+            {
+                foreach (var key in post.Keys)
+                {
+                    phpPrepend += "$_POST['" + key + "'] = \"" + post[key] + "\";\n";
                 }
             }
             //HTTP_ACCEPT, HTTP_ACCEPT_CHARSET

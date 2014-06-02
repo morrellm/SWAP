@@ -34,4 +34,8 @@
 #the default PHP location (C:\PHP\)
 #this should be an absolute path (ex: drive\folder\folder\PHP\).
 
+#Thread max is essentially the maximum amount of connections the server can
+#handle at the same time
+	ThreadMax = 10
+
 	

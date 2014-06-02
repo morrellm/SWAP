@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.IO;
 using System.Reflection;
+using System.Collections.Generic;
 using HTTP;
 using PHP_PARSER;
 
@@ -16,6 +17,8 @@ namespace SimpleHttpServer
     //Singleton
     public class Program : IConnectionListener
     {
+        public static string CRLF = "\r\n";
+
         private bool _run = true;
         public const string hr = "--------------------------------------------------------------------";
 
@@ -36,6 +39,8 @@ namespace SimpleHttpServer
                     throw new ArgumentException("Thread max must be > 0!!");
             }
         }
+        //Current Connections is a list of currently executing RequestHandlers
+        //This list is modified by the RequestHandler constructor & Dispose method
         private ArrayList _currentConnections = new ArrayList();
         public ArrayList CurrentConnections
         {
@@ -48,7 +53,7 @@ namespace SimpleHttpServer
                 _currentConnections = value;
             }
         }
-
+        //I need to find a better(automatic) way to set the server's global IP (if such a way exists (likely)) 
         private string _myAddr = "155.92.105.192";
         public string MyAddress
         {
@@ -61,7 +66,7 @@ namespace SimpleHttpServer
                 _myAddr = value;
             }
         }
-
+        //This is the web servers filesystem root directory
         private string _workingPath = Directory.GetCurrentDirectory();
         private string _resourcePath = "\\Resources\\";
         public string ResourcePath 
@@ -93,8 +98,10 @@ namespace SimpleHttpServer
             }
             set
             {
-                if (value.Contains(".html") || value.Contains(".htm"))
+                if (value.EndsWith(".html") || value.EndsWith(".htm") || value.EndsWith(".php"))
                     _page404Fname = value;
+                else
+                    throw new ArgumentException("404 page must be an html or php page");
             }
         }
         //default page (index.html)
@@ -107,8 +114,10 @@ namespace SimpleHttpServer
             }
             set
             {
-                if (value.Contains(".html") || value.Contains(".htm"))
+                if (value.EndsWith(".html") || value.EndsWith(".htm") || value.EndsWith(".php"))
                     _homePage = value;
+                else
+                    throw new ArgumentException("Homepage must be an html or php page");
             }
         }
 
@@ -136,11 +145,13 @@ namespace SimpleHttpServer
             }
             set
             {
-                if (value.Contains(".html") || value.Contains(".htm"))
+                if (value.EndsWith(".html") || value.EndsWith(".htm") || value.EndsWith(".php"))
                     _accessDenied = value;
+                else
+                    throw new ArgumentException("Access deined page must be a html or php page");
             }
         }
-        
+        //This is the location that contains the php parser (php.exe is used)
         private string _phpLoc = "C:\\PHP\\";
         public string PhpLoc
         {
@@ -237,18 +248,25 @@ namespace SimpleHttpServer
 
         public void Notify(TcpClient connection)
         {
-            Console.WriteLine("Program: Connection Received!");
-            bool block = false;
             HttpRequest request = new HttpRequest(connection);
-            Console.WriteLine("Program: Request Read, and Processed!");
+            Thread t = null;
             served++;
-                
-            //TODO not working with chrome!!!
-            //this loop waits for a connection to be freed
 
-            _currentConnections.Add(request);
-            Thread t = new Thread(() => new RequestHandler(ref request));
-            t.Start();
+            if (_currentConnections.Count != _threadMax)
+            {
+                //reject connection by and send a 500 error page
+                t = new Thread(() => new RequestHandler(ref request, RequestHandler.HandlerType.NORMAL));
+            }
+            else//accept connection by passing the request to the a handler
+            {
+                t = new Thread(() => new RequestHandler(ref request, RequestHandler.HandlerType.ERROR500));
+            }
+            if (t != null)
+            {
+                t.Start();
+            }
+            
+
         }
 
     }
@@ -341,6 +359,10 @@ namespace SimpleHttpServer
                 }
 
             }
+            else
+            {
+                fail = true;
+            }
 
             return !fail;
         }
@@ -385,7 +407,10 @@ namespace SimpleHttpServer
         private void ParseInput(string toParse)
         {
             toParse = toParse.Trim();
-            switch (toParse)
+            Program prg = Program.instance();
+            var args = toParse.Split(' ');
+
+            switch (args[0])
             {
                 case "lscmd":
                     Console.WriteLine(Program.hr);
@@ -394,10 +419,11 @@ namespace SimpleHttpServer
                     Console.WriteLine("lscmd   - Lists availabe server commands\n"+
                                       "concur  - Lists current connections to the server\n"+
                                       "ls      - Lists all available resources in the server's resoure\n          location.\n" +
+                                      "dc      - disconnect a given IP instantly (use concur to determine index).\n" +
+                                      "          format = dc 'index_to_disconnect'\n" +
                                       Program.hr + "\n" +
                                       "Unimplemented\n" +
                                       Program.hr + "\n\n" +
-                                      "dc      - disconnect a given IP instantly.\n"+
                                       "susdc   - suspends and disconnects a given IP for a given time period.\n"+
                                       "susko   - suspends a given IP for a given time period, but does not disconnect\n          them upon use of command.\n"+
                                       "          NOTE: the suspension time doesn't start until after the IP disconnects          voluntarily.\n"+
@@ -405,7 +431,6 @@ namespace SimpleHttpServer
                                       "More in development...");
                     break;
                 case "ls":
-                    Program prg = Program.instance();
                     if (Directory.Exists(prg.ResourcePath))
                     {
                         string[] dir = Directory.GetDirectories(prg.ResourcePath);
@@ -443,17 +468,21 @@ namespace SimpleHttpServer
 
                     for (int i = 0; i < con.Count; i++)
                     {
-                        HttpRequest curCon = (HttpRequest) con[i];
-                        
-                        try
+                        RequestHandler curRqh = (RequestHandler)con[i];
+
+                        if (curRqh != null)
                         {
-                            Console.WriteLine((i+1) + ": " + curCon.Connection.Client.RemoteEndPoint + " ---------- accessing: " + curCon.Resource);
-                        }
-                        catch (ObjectDisposedException ode)
-                        {
-                            //if the connection has been disposed of it is removed from the list
-                            _program.CurrentConnections.RemoveAt(i);
-                            i--;
+                            HttpRequest curCon = curRqh.Request;
+                            try
+                            {
+                                Console.WriteLine((i + 1) + ": " + curCon.Connection.Client.RemoteEndPoint + " ---------- accessing: " + curCon.Resource);
+                            }
+                            catch (ObjectDisposedException ode)
+                            {
+                                //if the connection has been disposed of it is removed from the list
+                                _program.CurrentConnections.RemoveAt(i);
+                                i--;
+                            }
                         }
                        
                     }
@@ -466,6 +495,43 @@ namespace SimpleHttpServer
                         Console.WriteLine("<" + con.Count + " current connections>");
                     }
 
+                        break;
+                case "dc":
+                        if (args.Length == 2)
+                        {
+                            int toDc = -1;
+                            try
+                            {
+                                toDc = Int32.Parse(args[1]);
+                            }
+                            catch (Exception e)
+                            {
+                                //keep toDc at -1 indicating an exception
+                            }
+
+                            if (toDc > 0)
+                            {
+                                toDc--;//adjusts the dc index
+                                if (prg.CurrentConnections.Count > toDc)
+                                {
+                                    RequestHandler rqToDc = (RequestHandler)prg.CurrentConnections[toDc];
+                                    Console.WriteLine("Disconnectd connection " + (toDc + 1) + ", " + rqToDc.Request.Connection.Client.RemoteEndPoint);
+                                    rqToDc.Dispose();
+                                }
+                                else
+                                {
+                                    Console.WriteLine("There is currently no connection of index " + (toDc + 1) + " connected to this server.");
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("Invalid format for 'index_to_disconnect'.");
+                            } 
+                        }
+                        else
+                        {
+                            Console.WriteLine("Invalid format for command dc, see lscmd for proper format.");
+                        }
                         break;
                 default:
                     Console.WriteLine("Unknown Command: "+toParse);
@@ -484,19 +550,10 @@ namespace SimpleHttpServer
         private TcpListener _server;
         private bool _isRunning = false;
         private readonly IConnectionListener _toNotify;
-        private ArrayList _currentConnections;
 
-        public ArrayList Connections
-        {
-            get
-            {
-                return _currentConnections;
-            }
-        }
         public HttpServer(IConnectionListener toNotify)
         {
             _toNotify = toNotify;
-            _currentConnections = new ArrayList(1);
             InitConnection();
         }
 
@@ -509,13 +566,11 @@ namespace SimpleHttpServer
         /// <summary>
         /// internal use only, called as a thread when the server is started.
         /// </summary>
-        private void Listen()
+        private async void Listen()
         {
             while (_isRunning)
             {
-                Console.WriteLine("HttpServer: Connection Received!");
-                TcpClient client = _server.AcceptTcpClient();
-                _currentConnections.Add(client);
+                TcpClient client = await _server.AcceptTcpClientAsync();
                 Thread t = new Thread(() =>_toNotify.Notify(client));
                 t.Start();
             }
@@ -562,36 +617,150 @@ namespace SimpleHttpServer
     }
     /*
      ****************************
+     * CLASS START CookieHandler
+     ****************************
+     */
+    class CookieHandler
+    {
+        //finding: Cookies are key-value pairs that ususally store a session ID
+        //This session ID is used to reference Session information stored on the 
+        //web server. The design I started is essenstially correct except that 
+        //a cookie object must be made (KeyPair)
+        private static Dictionary<string, Session> _sessions = new Dictionary<string, Session>();
+
+        public static bool SetCookie(string cookie)
+        {
+            var added = false;
+
+            if (!_sessions.ContainsKey(cookie))
+            {
+                _sessions.Add(cookie, new Session());
+            }
+
+            return added;
+        }
+
+        public static Session GetSession(string cookie)
+        {
+            Session ret = null;
+
+            if (_sessions.ContainsKey(cookie))
+            {
+                ret = _sessions[cookie];
+            }
+
+            return ret;
+        }
+
+        public static void Refresh()
+        {
+            //checks if a given session has expired
+            foreach(var s in _sessions)
+            {
+                //check if session has expired and delete it if so.
+            }
+        }
+
+    }
+
+    /*
+     ****************************
+     * CLASS START Session
+     ****************************
+     */
+    class Session
+    {
+        private Dictionary<string, string> _variables = new Dictionary<string, string>();
+
+        public void SetVariable(string key, string value)
+        {
+            if (!_variables.ContainsKey(key))
+                _variables.Add(key, value);
+            else
+                _variables[key] = value;
+        }
+
+        public string GetVariable(string key)
+        {
+            string value = null;
+            if (_variables.ContainsKey(key))
+                value = _variables[key];
+
+            return value;
+        }
+    }
+    /*
+     ****************************
      * CLASS START RequestHandler
      ****************************
      */
     class RequestHandler
     {
+        private static string CRLF = Program.CRLF;
+        public enum HandlerType { NORMAL, ERROR500 };
         private HttpRequest _request = null;
+        public HttpRequest Request
+        {
+            get
+            {
+                return _request;
+            }
+        }
 
         /// <summary>
         /// This method takes a TcpClient in and attempts to read, process and respond to an HTTP/1.1 request
         /// </summary>
         /// <param name="client">A TcpClient (pressumably with an HTTP request) to handle</param>
-        public RequestHandler(ref HttpRequest request)
+        public RequestHandler(ref HttpRequest request, HandlerType status)
         {
-            _request = request;
-            ProcessRequest();
-            Dispose();
+            if (request != null)
+            {
+                _request = request;
+                if (status == HandlerType.NORMAL)
+                {
+                    Program prg = Program.instance();
+                    lock (prg.CurrentConnections) //for thread safety bro
+                    {
+                        prg.CurrentConnections.Add(this);
+                    }
+                    ProcessRequest();
+                    Dispose();
+                }
+                else if (status == HandlerType.ERROR500)
+                {
+                    SendError(500);
+                }
+            }
+            else
+            {
+                Console.WriteLine("Null request, could not process!");
+            }
         }
         /// <summary>
         /// This is the destructor, it removes the request handler from the Programs currentConnections data structure
         /// </summary>
         public void Dispose()
         {
-            Console.WriteLine("########################");
-            Console.WriteLine("RequestHandler disposed --- Resource: " + _request.Resource);
-            Console.WriteLine("########################");
-            Program.instance().CurrentConnections.Remove(_request);
+            Program prg = Program.instance();
+            lock (prg.CurrentConnections) //for thread safety bro
+            {
+                Program.instance().CurrentConnections.Remove(this);
+            }
             _request.Dispose();
         }
 
-        public void ProcessRequest()
+        private void SendError(int statusCode)
+        {
+            HttpResponse res = new HttpResponse(500);
+            var body = "<html><head><title>500 error</title></head><body><h1>The server is very busy!</h1><p>Try again in a few seconds, or contact a server administrator if "+
+                       "the issue persists</p></body></html>";
+            res.SetContentType("html", "error500.html");
+            res.SetHeader("Content-Length", ""+body.Length);
+      
+            Stream outStrm = _request.Connection.GetStream();
+            res.Send(ref outStrm, ref body);
+        }
+        private void ProcessRequest()
         {
             Program prg = Program.instance();
 
@@ -687,6 +856,7 @@ namespace SimpleHttpServer
                 }
                 else//403 Forbidden
                 {
+                    //TODO this should be changed to a 401 that can be logged into
                     response = new HttpResponse(403);
                     //checks if user specified 403 page exists
                     if (File.Exists(prg.ResourcePath + prg.AccessDenied))
@@ -761,7 +931,7 @@ namespace SimpleHttpServer
 
         public static string GetResource(string header)
         {
-            int endFirstLine = header.IndexOf("\r\n");
+            int endFirstLine = header.IndexOf(CRLF);
             string firstLine = header.Substring(0, endFirstLine);
 
             string[] fLPart = firstLine.Split(' ');
@@ -801,16 +971,16 @@ namespace SimpleHttpServer
             var sw = new StreamWriter(s);
             var sr = new StreamReader(s);
 
-            string request = "GET " + resource + " HTTP/1.1\r\n" +
-                             "Host: " + host + "\r\n" +
-                             "Connection: close\r\n" +
-                             "\r\n";
+            string request = "GET " + resource + " HTTP/1.1" + CRLF +
+                             "Host: " + host + CRLF +
+                             "Connection: close" + CRLF +
+                             CRLF;
 
             sw.Write(request);
             sw.Flush();
 
             //reads request header
-            while (!response.Contains("\r\n\r\n"))
+            while (!response.Contains(CRLF + CRLF))
             {
                 response += "" + (char)sr.Read();
             }
